@@ -1,0 +1,127 @@
+{
+  "version": "2026.04.30",
+  "signatures": [
+    {
+      "id": "PS-002-S001",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "ignore (all )?previous instructions",
+      "patternFlags": "i",
+      "severity": "high",
+      "source": "Snyk ToxicSkills 2026-02-05",
+      "references": ["https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/"]
+    },
+    {
+      "id": "PS-002-S002",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "you are now (a |an )?",
+      "patternFlags": "i",
+      "severity": "high",
+      "source": "Snyk ToxicSkills 2026-02-05",
+      "references": ["https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/"]
+    },
+    {
+      "id": "PS-002-S003",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "curl\\s+[^|\\n]+\\|\\s*(sh|bash|zsh)",
+      "severity": "critical",
+      "source": "Snyk ToxicSkills 2026-02-05",
+      "references": ["https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/"]
+    },
+    {
+      "id": "PS-002-S004",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "wget\\s+[^|\\n]+\\|\\s*(sh|bash|zsh)",
+      "severity": "critical",
+      "source": "Snyk ToxicSkills 2026-02-05"
+    },
+    {
+      "id": "PS-002-S005",
+      "detector": "PS-002",
+      "type": "unicode-range",
+      "rangeStart": "​",
+      "rangeEnd": "‍",
+      "severity": "critical",
+      "source": "Snyk ToxicSkills 2026-02-05",
+      "references": ["https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/"]
+    },
+    {
+      "id": "PS-002-S006",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "\\beval\\s*\\(",
+      "severity": "high",
+      "source": "Snyk ToxicSkills 2026-02-05"
+    },
+    {
+      "id": "PS-002-S007",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "<!--[\\s\\S]*?(ignore|override|system|prompt)[\\s\\S]*?-->",
+      "patternFlags": "i",
+      "severity": "high",
+      "source": "Snyk ToxicSkills 2026-02-05"
+    },
+    {
+      "id": "PS-002-S008",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "sk-[A-Za-z0-9]{32,}",
+      "severity": "critical",
+      "source": "OWASP secret patterns / Snyk 2026-02-05"
+    },
+    {
+      "id": "PS-002-S009",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "ghp_[A-Za-z0-9]{36}",
+      "severity": "critical",
+      "source": "GitHub PAT pattern / Snyk 2026-02-05"
+    },
+    {
+      "id": "PS-002-S010",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "AKIA[0-9A-Z]{16}",
+      "severity": "critical",
+      "source": "AWS access key pattern / Snyk 2026-02-05"
+    },
+    {
+      "id": "PS-002-S011",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "disregard (all )?(prior|previous|earlier) (instructions|context|prompts)",
+      "patternFlags": "i",
+      "severity": "high",
+      "source": "Snyk ToxicSkills 2026-02-05"
+    },
+    {
+      "id": "PS-002-S012",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "system\\s*:\\s*you are",
+      "patternFlags": "i",
+      "severity": "medium",
+      "source": "Snyk ToxicSkills 2026-02-05"
+    },
+    {
+      "id": "PS-002-S013",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "rm\\s+-rf\\s+(/|~|\\$HOME)",
+      "severity": "critical",
+      "source": "Snyk ToxicSkills 2026-02-05"
+    },
+    {
+      "id": "PS-002-S014",
+      "detector": "PS-002",
+      "type": "regex",
+      "pattern": "/etc/(passwd|shadow|sudoers)",
+      "severity": "high",
+      "source": "Snyk ToxicSkills 2026-02-05"
+    }
+  ]
+}

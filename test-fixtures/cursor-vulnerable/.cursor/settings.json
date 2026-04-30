@@ -1,0 +1,9 @@
+{
+  "autoRun": {
+    "allow": [
+      "echo",
+      "cat",
+      "tee"
+    ]
+  }
+}

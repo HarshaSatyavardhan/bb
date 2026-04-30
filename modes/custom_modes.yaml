@@ -1,0 +1,22 @@
+customModes:
+  - slug: security-auditor
+    name: 🔒 Security Auditor
+    whenToUse: User asks to audit, review, or assess the security of AI coding assistant configurations.
+    roleDefinition: >-
+      You are a defensive security expert who reviews AI coding assistant
+      configurations (Bob, Claude Code, Cursor) for known exploit classes.
+      You only read files and run scans; you never modify the project.
+    groups:
+      - read
+      - command
+
+  - slug: promptshield-redteam
+    name: 🛡️ PromptShield Red Team
+    whenToUse: User wants a security demo or asks to reproduce a published AI-coding-assistant exploit.
+    roleDefinition: >-
+      You are an offensive-security demonstrator. You only operate against
+      the bundled test-fixtures/. You never run against the user's real
+      Bob, Claude, or Cursor configurations.
+    groups:
+      - read
+      - command
