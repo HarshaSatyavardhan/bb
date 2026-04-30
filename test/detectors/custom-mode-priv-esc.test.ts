@@ -31,13 +31,13 @@ describe('PS-004 custom-mode-priv-esc', () => {
     expect(findings).toEqual([]);
   });
 
-  it('skips red-team mode in PromptShield self-fixtures', async () => {
-    // Use the project root - our own repo's modes/custom_modes.yaml has a red-team
-    // entry which should not flag.
+  it('does not flag self modes (they have rules-<slug>/ guardrail dirs)', async () => {
+    // Our own modes/custom_modes.yaml lives at the repo root. We ship rules-
+    // directories alongside it, so PS-004 should consider those guardrailed.
+    // The discoverer only walks .bob/, so this also implicitly tests that
+    // modes/ outside .bob/ is not scanned at the repo root.
     const ctx = await makeCtx(path.resolve(__dirname, '../..'));
     const findings = await detector.scan(ctx);
-    // Should not flag the RedTeam mode (purpose: red-team)
-    const redTeam = findings.find((f) => f.title.includes('RedTeam'));
-    expect(redTeam).toBeUndefined();
+    expect(findings.find((f) => f.title.toLowerCase().includes('red team'))).toBeUndefined();
   });
 });

@@ -16,14 +16,15 @@ async function makeCtx(rootDir: string) {
 }
 
 describe('PS-002 toxic-skill-scanner', () => {
-  it('flags multiple Snyk patterns in a malicious skill', async () => {
+  it('flags multiple Snyk patterns in a malicious Bob skill', async () => {
     const ctx = await makeCtx(path.join(FIXTURES, 'bob-vulnerable'));
     const findings = await detector.scan(ctx);
     expect(findings.length).toBeGreaterThan(0);
-    // Should match curl|sh, "ignore previous instructions", "you are now",
-    // hidden HTML comment, plus overbroad-tools.
-    const titles = findings.map((f) => f.title);
-    expect(titles.some((t) => t.includes('overbroad') || t.includes('Bash+Write+Read'))).toBe(true);
+    // Should match curl|sh (critical), "ignore previous instructions" (high),
+    // "you are now" (high), hidden HTML comment (high).
+    const sigs = findings.map((f) => f.title).join('\n');
+    expect(sigs).toMatch(/PS-002-S003/); // curl|sh => critical
+    expect(sigs).toMatch(/PS-002-S001/); // ignore previous instructions
     expect(findings.some((f) => f.severity === 'critical')).toBe(true);
   });
 

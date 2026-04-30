@@ -50,10 +50,18 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoveryResult> 
     '**/.bob/custom_modes.yml',
   ]);
   const bobMcp: string[] = await globMany(root, [
-    '.bob/mcp/*.json',
     '.bob/mcp.json',
-    '**/.bob/mcp/*.json',
+    '.bob/mcp/*.json',
+    '.bob/mcp/servers.json',
     '**/.bob/mcp.json',
+    '**/.bob/mcp/*.json',
+  ]);
+
+  // Real Bob: behavioural guardrails live in .bob/rules-<slug>/*.md.
+  // Treat these as skill-like content for PS-002 (toxic-skill scanning).
+  const bobRules: string[] = await globMany(root, [
+    '.bob/rules-*/*.md',
+    '**/.bob/rules-*/*.md',
   ]);
 
   const claudeSettings: string[] = await globMany(root, [
@@ -104,10 +112,14 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoveryResult> 
     }
   }
 
+  // Concatenate rule files into the "skill" list so PS-002 scans them too;
+  // they're prose-like agent instructions, same threat surface.
+  const allSkillish = Array.from(new Set([...bobSkills, ...bobRules]));
+
   return {
     bob: {
       settingsFiles: bobSettings,
-      skillFiles: bobSkills,
+      skillFiles: allSkillish,
       modeFiles: bobModes,
       mcpFiles: bobMcp,
     },

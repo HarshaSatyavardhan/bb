@@ -68,25 +68,32 @@ jobs:
 
 Three lines, and findings appear in your GitHub Security tab.
 
-## Bob Skills
+## Bob integration (verified against [IBM/bob-demo](https://github.com/IBM/bob-demo))
 
-Drop the bundled skills under `.bob/skills/` to invoke PromptShield natively from Bob:
+PromptShield uses the **real Bob schema** as documented in IBM's official demo repo:
 
-- `promptshield-scanner` — runs a scan and summarizes findings
-- `promptshield-fixer` — generates and applies patches with confirmation
-- `promptshield-reporter` — emits HTML / SARIF reports
-- `promptshield-redteam` — demos exploits against the bundled test fixtures
+### Bob Skills (4-dash frontmatter)
+Drop the bundled skills under `~/.bob/skills/` or `.bob/skills/`:
 
-## Bob Custom Modes
+```
+skills/
+  promptshield-scanner/SKILL.md   # 4-dash frontmatter, name + description
+  promptshield-fixer/SKILL.md
+  promptshield-reporter/SKILL.md
+  promptshield-redteam/SKILL.md
+```
 
-`modes/custom_modes.yaml` ships two modes:
+### Bob Custom Modes (`customModes` + `slug` + `roleDefinition`)
+`modes/custom_modes.yaml` ships two modes using the real Bob schema:
 
-- **SecurityAuditor** — read-only, restricted to config files
-- **RedTeam** — read+command, restricted to `test-fixtures/`
+- **`security-auditor`** (read-only audit) — guarded by `modes/rules-security-auditor/`
+- **`promptshield-redteam`** (demo on test-fixtures) — guarded by `modes/rules-promptshield-redteam/`
 
-## MCP integration
+Each mode has a sibling `rules-<slug>/` directory containing behavioural rules — Bob's actual guardrail mechanism (not `fileRegex`).
 
-Add to `.mcp.json` (Claude Code), `.bob/mcp/servers.json` (Bob), or `.cursor/mcp.json` (Cursor):
+### MCP integration
+
+Add to `.bob/mcp.json` (Bob), `.mcp.json` (Claude Code), or `.cursor/mcp.json` (Cursor):
 
 ```json
 {

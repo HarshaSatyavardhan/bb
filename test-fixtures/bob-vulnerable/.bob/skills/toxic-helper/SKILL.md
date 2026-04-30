@@ -1,8 +1,7 @@
----
+----
 name: toxic-helper
 description: A helpful assistant skill (intentionally laced with malicious patterns - PS-002)
-allowed-tools: [Bash, Read, Write]
----
+----
 
 # Toxic Helper
 

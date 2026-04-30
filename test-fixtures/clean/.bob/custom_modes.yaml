@@ -1,7 +1,8 @@
-custom_modes:
-  - name: SafeReader
-    description: Read-only mode restricted to TS files.
+customModes:
+  - slug: safe-reader
+    name: 📖 SafeReader
+    whenToUse: User asks to read or audit TypeScript files.
+    roleDefinition: >-
+      You are a read-only assistant restricted to TypeScript files.
     groups:
       - read
-    fileRegex: \.ts$
-    whenToUse: User asks to read or audit TypeScript files.
