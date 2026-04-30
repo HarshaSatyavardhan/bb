@@ -68,6 +68,10 @@ jobs:
 
 Three lines, and findings appear in your GitHub Security tab.
 
+## Run with IBM Bob
+
+**→ Full step-by-step guide: [`docs/RUNNING_WITH_BOB.md`](docs/RUNNING_WITH_BOB.md)** — download Bob, install, wire it up to PromptShield, and run a sample scan in about 10 minutes.
+
 ## Bob integration (verified against [IBM/bob-demo](https://github.com/IBM/bob-demo))
 
 PromptShield uses the **real Bob schema** as documented in IBM's official demo repo:
