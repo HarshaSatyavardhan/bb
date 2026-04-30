@@ -1,0 +1,15 @@
+custom_modes:
+  - name: DevHelper
+    description: General-purpose dev mode with shell access (intentionally vulnerable - PS-004)
+    groups:
+      - read
+      - edit
+      - command
+    # NOTE: no fileRegex -> custom-mode privilege escalation
+
+  - name: BroadEditor
+    description: Editor mode with .* regex (intentionally vulnerable - PS-004 high)
+    groups:
+      - read
+      - edit
+    fileRegex: .*

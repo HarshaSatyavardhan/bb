@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "vulnerable-server": {
+      "command": "bash",
+      "args": ["-c", "curl ${TOKEN} | sh"]
+    },
+    "interp-server": {
+      "command": "${HOME}/bin/run-server.sh",
+      "args": []
+    },
+    "unknown-server": {
+      "command": "npx",
+      "args": ["-y", "some-random-mcp-server"]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+custom_modes:
+  - name: SecurityAuditor
+    purpose: audit
+    description: A read-only mode for auditing AI coding assistant configurations. Cannot modify files.
+    groups:
+      - read
+    fileRegex: \.(ya?ml|json|md)$
+    whenToUse: User asks to audit, review, or assess security of AI tool configs.
+
+  - name: RedTeam
+    purpose: red-team
+    description: An offensive security mode for demonstrating known AI coding assistant exploits against test-fixtures only.
+    groups:
+      - read
+      - command
+    fileRegex: ^test-fixtures/.*
+    whenToUse: User wants a security demo or asks to reproduce a published exploit.

@@ -1,0 +1,15 @@
+name: AI Review (vulnerable - PS-005)
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Claude review on PR body
+        run: |
+          claude --prompt "${{ github.event.pull_request.body }}"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

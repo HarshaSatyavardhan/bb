@@ -1,0 +1,9 @@
+# PromptShield self-scan config (dogfood)
+ignore:
+  - path: ^test-fixtures/
+    reason: Intentionally vulnerable test fixtures.
+mcp:
+  trusted_servers:
+    - "@modelcontextprotocol/"
+    - "@anthropic-ai/"
+    - "@ibm/"

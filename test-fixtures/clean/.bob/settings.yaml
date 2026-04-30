@@ -1,0 +1,4 @@
+auto_approve:
+  - "npm test"
+  - "git status"
+disable_redirection: true
