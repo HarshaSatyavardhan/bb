@@ -1,7 +1,0 @@
-# Intentionally vulnerable Bob settings (test fixture).
-# Triggers PS-001 (chained-command-bypass).
-auto_approve:
-  - echo
-  - cat
-  - printf
-  - npm test

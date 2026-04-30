@@ -15,32 +15,32 @@ async function makeCtx(rootDir: string) {
   return { discovery, config: DEFAULT_CONFIG, signatures };
 }
 
-describe('PS-001 chained-command-bypass', () => {
-  it('flags Bob auto_approve with bare echo/cat/printf', async () => {
+describe('PS-001 chained-command-bypass (real Bob threat)', () => {
+  it('flags shell utilities (echo/cat/tee) inside `alwaysAllow` of a Bob MCP server', async () => {
     const ctx = await makeCtx(path.join(FIXTURES, 'bob-vulnerable'));
     const findings = await detector.scan(ctx);
     expect(findings.length).toBeGreaterThanOrEqual(3);
     const cmds = findings.map((f) => f.title);
     expect(cmds.some((t) => t.includes('"echo"'))).toBe(true);
     expect(cmds.some((t) => t.includes('"cat"'))).toBe(true);
-    expect(cmds.some((t) => t.includes('"printf"'))).toBe(true);
+    expect(cmds.some((t) => t.includes('"tee"'))).toBe(true);
     expect(findings.every((f) => f.severity === 'critical')).toBe(true);
   });
 
-  it('flags Claude permissions.allow with bare commands', async () => {
+  it('flags Claude permissions.allow with shell utilities', async () => {
     const ctx = await makeCtx(path.join(FIXTURES, 'claude-vulnerable'));
     const findings = await detector.scan(ctx);
     expect(findings.length).toBeGreaterThanOrEqual(2);
     expect(findings.every((f) => f.location.path.endsWith('settings.json'))).toBe(true);
   });
 
-  it('flags Cursor autoRun.allow with bare commands', async () => {
+  it('flags Cursor autoRun.allow with shell utilities', async () => {
     const ctx = await makeCtx(path.join(FIXTURES, 'cursor-vulnerable'));
     const findings = await detector.scan(ctx);
     expect(findings.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('does not flag clean fixture (disable_redirection: true)', async () => {
+  it('does not flag the clean fixture', async () => {
     const ctx = await makeCtx(path.join(FIXTURES, 'clean'));
     const findings = await detector.scan(ctx);
     expect(findings).toEqual([]);

@@ -1,7 +1,10 @@
-import { readFile } from 'node:fs/promises';
-import { parse as parseYaml } from 'yaml';
 import type { Detector, DetectorContext, Finding, Severity } from '../types/index.js';
-import { hashFingerprint, findLineForString, snippetAround } from '../utils/fs.js';
+import { findLineForString, snippetAround } from '../utils/fs.js';
+import { loadYaml } from '../utils/config-loader.js';
+import { buildFinding } from '../utils/finding-builder.js';
+import { EVIDENCE } from '../utils/evidence.js';
+
+const DETECTOR_ID = 'comment-and-control-workflow';
 
 const AI_BINARIES = ['claude', 'bob', 'gemini', 'cursor-cli', 'aider', 'codex'];
 const UNTRUSTED_INTERPOLATIONS = [
@@ -17,26 +20,19 @@ const UNTRUSTED_INTERPOLATIONS = [
   'github.head_ref',
 ];
 
-const REFS = [
-  'https://oddguan.com/blog/comment-and-control-prompt-injection-credential-theft-claude-code-gemini-cli-github-copilot/',
-];
-
 interface StepCheck {
   invokesAi: boolean;
   agentBinary?: string;
   hasUntrustedInterp: boolean;
   interpolatedField?: string;
   hasAllowGuard: boolean;
-  textSample: string;
 }
 
 function stepText(step: any): string {
   const parts: string[] = [];
   if (typeof step?.run === 'string') parts.push(step.run);
   if (step?.with && typeof step.with === 'object') {
-    for (const v of Object.values(step.with)) {
-      if (typeof v === 'string') parts.push(v);
-    }
+    for (const v of Object.values(step.with)) if (typeof v === 'string') parts.push(v);
   }
   if (typeof step?.uses === 'string') parts.push(step.uses);
   return parts.join('\n');
@@ -45,31 +41,26 @@ function stepText(step: any): string {
 function checkStep(step: any): StepCheck {
   const text = stepText(step);
   const lower = text.toLowerCase();
-
-  let invokesAi = false;
   let agentBinary: string | undefined;
   for (const bin of AI_BINARIES) {
     const re = new RegExp(`(^|[\\s/$])${bin}([\\s$]|$|\\b)`, 'i');
-    if (re.test(text) || lower.includes(`${bin}-action`) || lower.includes(`anthropic/${bin}`) || lower.includes(`anthropics/claude-code`) || (bin === 'claude' && lower.includes('claude-code'))) {
-      invokesAi = true;
+    if (re.test(text) || lower.includes(`${bin}-action`) || lower.includes(`anthropic/${bin}`) ||
+        lower.includes(`anthropics/claude-code`) || (bin === 'claude' && lower.includes('claude-code'))) {
       agentBinary = bin;
       break;
     }
   }
-
-  let hasUntrustedInterp = false;
   let interpolatedField: string | undefined;
   for (const interp of UNTRUSTED_INTERPOLATIONS) {
-    if (text.includes(`\${{ ${interp}`) || text.includes(`\${{${interp}`) || text.includes(interp)) {
-      hasUntrustedInterp = true;
-      interpolatedField = interp;
-      break;
-    }
+    if (text.includes(interp)) { interpolatedField = interp; break; }
   }
-
-  const hasAllowGuard = /--disallowed-tools|--allowed-tools|disallowed_tools|allowed_tools/i.test(text);
-
-  return { invokesAi, agentBinary, hasUntrustedInterp, interpolatedField, hasAllowGuard, textSample: text };
+  return {
+    invokesAi: !!agentBinary,
+    agentBinary,
+    hasUntrustedInterp: !!interpolatedField,
+    interpolatedField,
+    hasAllowGuard: /--disallowed-tools|--allowed-tools|disallowed_tools|allowed_tools/i.test(text),
+  };
 }
 
 function severityFromScore(score: number): Severity | null {
@@ -82,43 +73,23 @@ function severityFromScore(score: number): Severity | null {
 
 async function scanWorkflow(file: string): Promise<Finding[]> {
   const out: Finding[] = [];
-  let content: string;
-  try {
-    content = await readFile(file, 'utf8');
-  } catch {
-    return out;
-  }
-  let doc: any;
-  try {
-    doc = parseYaml(content);
-  } catch {
-    return out;
-  }
+  const { text, doc } = await loadYaml<any>(file);
   if (!doc) return out;
 
-  // Check workflow trigger
-  const onTrigger = doc.on ?? doc.true; // YAML "on" parses as true sometimes
+  // YAML's `on:` key sometimes parses as the boolean `true`.
+  const onTrigger = doc.on ?? doc.true;
   let usesPRTarget = false;
-  if (typeof onTrigger === 'string') {
-    usesPRTarget = onTrigger === 'pull_request_target';
-  } else if (Array.isArray(onTrigger)) {
-    usesPRTarget = onTrigger.includes('pull_request_target');
-  } else if (onTrigger && typeof onTrigger === 'object') {
-    usesPRTarget = 'pull_request_target' in onTrigger;
-  }
+  if (typeof onTrigger === 'string') usesPRTarget = onTrigger === 'pull_request_target';
+  else if (Array.isArray(onTrigger)) usesPRTarget = onTrigger.includes('pull_request_target');
+  else if (onTrigger && typeof onTrigger === 'object') usesPRTarget = 'pull_request_target' in onTrigger;
 
-  // Check for safety guard at workflow level
-  const workflowText = content;
-  const hasForkGuard = /github\.event\.pull_request\.head\.repo\.full_name\s*==\s*github\.repository/i.test(workflowText);
-
+  const hasForkGuard = /github\.event\.pull_request\.head\.repo\.full_name\s*==\s*github\.repository/i.test(text);
   const jobs = doc.jobs;
   if (!jobs || typeof jobs !== 'object') return out;
 
   for (const [jobName, job] of Object.entries(jobs as Record<string, any>)) {
-    if (!job || typeof job !== 'object') continue;
+    if (!job || typeof job !== 'object' || !Array.isArray((job as any).steps)) continue;
     const steps = (job as any).steps;
-    if (!Array.isArray(steps)) continue;
-
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       if (!step || typeof step !== 'object') continue;
@@ -132,27 +103,23 @@ async function scanWorkflow(file: string): Promise<Finding[]> {
 
       const sev = severityFromScore(score);
       if (!sev) continue;
-
       const stepName = step.name ?? `step #${i + 1}`;
-      const line = findLineForString(content, typeof step.name === 'string' ? step.name : (step.run?.split('\n')[0] ?? jobName));
+      const line = findLineForString(text, typeof step.name === 'string' ? step.name : (step.run?.split('\n')[0] ?? jobName));
 
-      out.push({
+      out.push(buildFinding({
         ruleId: 'PS-005',
-        detectorId: 'comment-and-control-workflow',
+        detectorId: DETECTOR_ID,
         severity: sev,
         title: `GitHub Actions step "${stepName}" passes untrusted PR/comment input to ${check.agentBinary ?? 'AI'} CLI`,
         description: `The workflow invokes the ${check.agentBinary ?? 'AI'} CLI with interpolation from "${check.interpolatedField}" - a Comment-and-Control prompt-injection vector (Aonan Guan + JHU, 2026-04-15).${usesPRTarget ? ' The workflow uses pull_request_target, which exposes secrets to forked PRs.' : ''}${!check.hasAllowGuard ? ' No --disallowed-tools / --allowed-tools guard is configured.' : ''}${hasForkGuard ? ' (Fork guard mitigates exposure - severity reduced.)' : ''}`,
-        location: { path: file, startLine: line, snippet: snippetAround(content, line) },
-        evidence: {
-          primarySource: 'Aonan Guan + Johns Hopkins 2026-04-15',
-          references: REFS,
-        },
+        filePath: file, line, snippet: snippetAround(text, line),
+        evidence: EVIDENCE.commentAndControl(),
         remediation: {
           summary: 'Pass untrusted PR text through a step env variable, run AI CLI with --disallowed-tools "Bash,Write,Edit", and prefer pull_request over pull_request_target where possible.',
           autoFixAvailable: true,
         },
-        fingerprint: hashFingerprint('PS-005', file, line, jobName, i),
-      });
+        fingerprintParts: [jobName, i],
+      }));
     }
   }
   return out;
@@ -161,12 +128,12 @@ async function scanWorkflow(file: string): Promise<Finding[]> {
 const detector: Detector = {
   id: 'PS-005',
   name: 'Comment-and-Control workflow',
-  description: 'Detects GitHub Actions steps that pass untrusted PR/issue/comment input into AI CLI invocations.',
+  description:
+    'Detects GitHub Actions steps that pass untrusted PR/issue/comment input into AI CLI invocations.',
+
   async scan(ctx: DetectorContext): Promise<Finding[]> {
     const findings: Finding[] = [];
-    for (const f of ctx.discovery.workflows) {
-      findings.push(...(await scanWorkflow(f)));
-    }
+    for (const f of ctx.discovery.workflows) findings.push(...(await scanWorkflow(f)));
     return findings;
   },
 };

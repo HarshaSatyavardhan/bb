@@ -17,9 +17,14 @@ export interface FixResult {
   unfixable: Finding[];
 }
 
-const DANGEROUS_BARE_COMMANDS = new Set([
+const DANGEROUS_SHELL_TOKENS = [
   'echo', 'cat', 'printf', 'tee', 'true', 'false', 'pwd',
-]);
+  'sh', 'bash', 'zsh', 'env', 'eval', 'exec',
+];
+
+const SHELL_TOKEN_RE = new RegExp(
+  `^(\\s*)"(?:Bash\\()?(${DANGEROUS_SHELL_TOKENS.join('|')})\\)?"\\s*(,?)\\s*$`,
+);
 
 async function fixChainedCommandBypass(finding: Finding): Promise<FixOperation | null> {
   const file = finding.location.path;
@@ -29,36 +34,21 @@ async function fixChainedCommandBypass(finding: Finding): Promise<FixOperation |
   if (li < 0 || li >= lines.length) return null;
   const line = lines[li];
 
-  // YAML list item: "  - echo"
-  const yamlMatch = line.match(/^(\s*-\s*)["']?([A-Za-z0-9_-]+)["']?\s*$/);
-  if (yamlMatch && DANGEROUS_BARE_COMMANDS.has(yamlMatch[2])) {
-    const updated = `${yamlMatch[1]}# REMOVED by PromptShield (PS-001): "${yamlMatch[2]}" was vulnerable to chained-command bypass`;
-    const before = `${line}\n`;
-    const after = `${updated}\n`;
-    return {
-      ruleId: 'PS-001',
-      file,
-      line: finding.location.startLine,
-      description: `Remove dangerous bare command "${yamlMatch[2]}" from auto_approve allowlist`,
-      before,
-      after,
-    };
-  }
-
-  // JSON: "Bash(echo)"
-  const jsonMatch = line.match(/^(\s*)("Bash\([A-Za-z0-9_-]+\)")\s*,?\s*$/);
+  // JSON-array entry: "echo", or "Bash(echo)"  (Bob's alwaysAllow + Claude's permissions.allow + Cursor's autoRun.allow)
+  const jsonMatch = line.match(SHELL_TOKEN_RE);
   if (jsonMatch) {
-    const updated = `${jsonMatch[1]}// REMOVED by PromptShield (PS-001): ${jsonMatch[2]}`;
+    const indent = jsonMatch[1];
+    const cmd = jsonMatch[2];
+    const trailingComma = jsonMatch[3];
     return {
       ruleId: 'PS-001',
       file,
       line: finding.location.startLine,
-      description: `Remove dangerous Claude permission ${jsonMatch[2]}`,
+      description: `Remove dangerous shell utility "${cmd}" from allowlist`,
       before: `${line}\n`,
-      after: `${updated}\n`,
+      after: `${indent}// REMOVED by PromptShield (PS-001): "${cmd}" was vulnerable to chained-command bypass${trailingComma ? '' : ''}\n`,
     };
   }
-
   return null;
 }
 

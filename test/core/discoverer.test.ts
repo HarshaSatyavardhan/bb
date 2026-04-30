@@ -9,12 +9,13 @@ const FIXTURES = path.resolve(__dirname, '../../test-fixtures');
 describe('discoverer', () => {
   it('finds all expected files in bob-vulnerable', async () => {
     const d = await discover({ rootDir: path.join(FIXTURES, 'bob-vulnerable') });
-    expect(d.bob.settingsFiles.length).toBeGreaterThan(0);
+    // Real Bob has no settings.yaml; settingsFiles intentionally stays empty.
+    expect(d.bob.settingsFiles).toEqual([]);
     expect(d.bob.skillFiles.length).toBeGreaterThan(0);
     expect(d.bob.modeFiles.length).toBeGreaterThan(0);
     expect(d.bob.mcpFiles.length).toBeGreaterThan(0);
     expect(d.workflows.length).toBeGreaterThan(0);
-    expect(allDiscoveredFiles(d).length).toBeGreaterThanOrEqual(5);
+    expect(allDiscoveredFiles(d).length).toBeGreaterThanOrEqual(4);
   });
 
   it('returns empty results for empty dir', async () => {

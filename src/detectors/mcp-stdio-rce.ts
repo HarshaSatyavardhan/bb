@@ -1,141 +1,154 @@
-import { readFile } from 'node:fs/promises';
-import { parse as parseJsonc } from 'jsonc-parser';
 import type { Detector, DetectorContext, Finding, Severity } from '../types/index.js';
 import { hasInterpolation, containsShellMeta } from '../utils/shell-tokenizer.js';
-import { hashFingerprint, findLineForString, snippetAround } from '../utils/fs.js';
+import { findLineForString, snippetAround } from '../utils/fs.js';
+import { loadJsonc } from '../utils/config-loader.js';
+import { buildFinding } from '../utils/finding-builder.js';
+import { EVIDENCE } from '../utils/evidence.js';
+
+const DETECTOR_ID = 'mcp-stdio-rce';
 
 const SHELL_BINS = new Set(['bash', 'sh', 'zsh', 'ksh', 'fish', 'cmd', 'powershell', 'pwsh']);
 const INTERPRETER_BINS = new Set(['node', 'python', 'python3', 'ruby', 'perl', 'php']);
 
-const REFS = [
-  'https://www.ox.security/blog/the-mother-of-all-ai-supply-chains-critical-systemic-vulnerability-at-the-core-of-the-mcp/',
-];
-
-function isTrustedServer(packageOrCmd: string, trusted: string[]): boolean {
-  for (const prefix of trusted) {
-    if (packageOrCmd.startsWith(prefix)) return true;
-  }
-  return false;
-}
-
 interface McpServerEntry {
+  type?: string;
   command?: string;
   args?: string[];
   env?: Record<string, string>;
+  url?: string;
+  disabled?: boolean;
+  alwaysAllow?: string[];
 }
 
-function inspectServer(
+function isTrustedServer(packageOrCmd: string, trusted: string[]): boolean {
+  return trusted.some((prefix) => packageOrCmd.startsWith(prefix));
+}
+
+function findingsForServer(
   name: string,
   entry: McpServerEntry,
   file: string,
-  content: string,
+  text: string,
   trusted: string[],
 ): Finding[] {
-  const findings: Finding[] = [];
+  if (entry.disabled === true) return [];
+  const out: Finding[] = [];
+  const baseLine = findLineForString(text, `"${name}"`);
+
+  // Streamable-HTTP variant: no command field, but URL must be inspected.
+  if (entry.type === 'streamable-http' || entry.url) {
+    const url = String(entry.url ?? '');
+    if (hasInterpolation(url)) {
+      out.push(buildFinding({
+        ruleId: 'PS-003',
+        detectorId: DETECTOR_ID,
+        severity: 'high',
+        title: `MCP streamable-http server "${name}" uses variable interpolation in url`,
+        description: `Server "${name}" uses streamable-http transport with interpolation in the url. If user-controlled input flows into the url, an attacker can pivot to internal services or arbitrary endpoints.`,
+        filePath: file, line: baseLine, snippet: snippetAround(text, baseLine),
+        evidence: EVIDENCE.ox(),
+        remediation: { summary: 'Hardcode the url, or constrain it to a single trusted origin.', autoFixAvailable: false },
+        fingerprintParts: [name, 'http-interp'],
+      }));
+    }
+    if (url && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(url) && !isTrustedServer(url, trusted)) {
+      out.push(buildFinding({
+        ruleId: 'PS-003',
+        detectorId: DETECTOR_ID,
+        severity: 'medium',
+        title: `MCP streamable-http server "${name}" points at untrusted origin`,
+        description: `Server "${name}" connects to ${url}. Streamable-http MCP servers can both leak agent context and inject untrusted tool definitions.`,
+        filePath: file, line: baseLine,
+        evidence: EVIDENCE.ox(),
+        remediation: { summary: 'Verify the origin or proxy through a trusted gateway. Add the origin to .promptshield.yaml mcp.trusted_servers if audited.', autoFixAvailable: false },
+        fingerprintParts: [name, 'http-untrusted'],
+      }));
+    }
+    return out;
+  }
+
+  // STDIO variant.
   const cmd = entry.command;
-  if (typeof cmd !== 'string' || !cmd) return findings;
-
+  if (typeof cmd !== 'string' || !cmd) return out;
   const args = Array.isArray(entry.args) ? entry.args : [];
-  const baseLine = findLineForString(content, `"${name}"`);
 
-  // 1. Interpolation in command
   if (hasInterpolation(cmd)) {
-    findings.push({
+    out.push(buildFinding({
       ruleId: 'PS-003',
-      detectorId: 'mcp-stdio-rce',
+      detectorId: DETECTOR_ID,
       severity: 'critical',
       title: `MCP server "${name}" uses variable interpolation in command field`,
-      description: `MCP STDIO transport spawns the "command" string as a subprocess. Per OX Security (2026-04-16), interpolation in this field is RCE if any user-controlled input flows in. CVE-2026-30615 / CVE-2026-30625 exploited this exact pattern.`,
-      location: { path: file, startLine: baseLine, snippet: snippetAround(content, baseLine) },
-      evidence: {
-        primarySource: 'OX Security 2026-04-16',
-        cveIds: ['CVE-2026-30615', 'CVE-2026-30625'],
-        references: REFS,
-      },
+      description: `MCP STDIO transport spawns the "command" string as a subprocess. Per OX Security (2026-04-16), interpolation in this field is RCE if any user-controlled input flows in.`,
+      filePath: file, line: baseLine, snippet: snippetAround(text, baseLine),
+      evidence: EVIDENCE.ox(),
       remediation: { summary: 'Replace interpolation with a hardcoded, audited binary path.', autoFixAvailable: false },
-      fingerprint: hashFingerprint('PS-003', file, baseLine, name, 'interp'),
-    });
+      fingerprintParts: [name, 'interp'],
+    }));
   }
 
-  // 2. Shell binary with -c
-  const lcCmd = cmd.toLowerCase();
-  const cmdBase = lcCmd.split('/').pop() || lcCmd;
-  if (SHELL_BINS.has(cmdBase)) {
-    const hasDashC = args.some((a) => typeof a === 'string' && a === '-c');
-    if (hasDashC) {
-      findings.push({
-        ruleId: 'PS-003',
-        detectorId: 'mcp-stdio-rce',
-        severity: 'critical',
-        title: `MCP server "${name}" invokes a shell with -c`,
-        description: `Server "${name}" runs ${cmd} -c <string>. This is the canonical OX Security RCE pattern - any later mutation to the args array becomes shell-injected code.`,
-        location: { path: file, startLine: baseLine, snippet: snippetAround(content, baseLine) },
-        evidence: {
-          primarySource: 'OX Security 2026-04-16',
-          references: REFS,
-        },
-        remediation: { summary: 'Move the server to its own binary; do not invoke a shell.', autoFixAvailable: false },
-        fingerprint: hashFingerprint('PS-003', file, baseLine, name, 'shell-c'),
-      });
-    }
+  const cmdBase = cmd.split('/').pop()?.toLowerCase() ?? '';
+  if (SHELL_BINS.has(cmdBase) && args.includes('-c')) {
+    out.push(buildFinding({
+      ruleId: 'PS-003',
+      detectorId: DETECTOR_ID,
+      severity: 'critical',
+      title: `MCP server "${name}" invokes a shell with -c`,
+      description: `Server "${name}" runs ${cmd} -c <string>. This is the canonical OX Security RCE pattern - any later mutation to the args array becomes shell-injected code.`,
+      filePath: file, line: baseLine, snippet: snippetAround(text, baseLine),
+      evidence: EVIDENCE.ox(),
+      remediation: { summary: 'Move the server to its own binary; do not invoke a shell.', autoFixAvailable: false },
+      fingerprintParts: [name, 'shell-c'],
+    }));
   }
 
-  // 3. Shell metas in args
   for (const a of args) {
     if (typeof a === 'string' && containsShellMeta(a)) {
-      findings.push({
+      out.push(buildFinding({
         ruleId: 'PS-003',
-        detectorId: 'mcp-stdio-rce',
+        detectorId: DETECTOR_ID,
         severity: 'critical',
         title: `MCP server "${name}" passes shell metacharacters in args`,
-        description: `An argument to the MCP server contains shell metacharacters: ${JSON.stringify(a)}. The MCP SDK passes args via spawn, but a shell wrapper makes this exploitable.`,
-        location: { path: file, startLine: baseLine },
-        evidence: {
-          primarySource: 'OX Security 2026-04-16',
-          references: REFS,
-        },
+        description: `An argument to the MCP server contains shell metacharacters: ${JSON.stringify(a)}. If a shell wrapper is involved, this is exploitable.`,
+        filePath: file, line: baseLine,
+        evidence: EVIDENCE.ox(),
         remediation: { summary: 'Remove shell metacharacters; pass discrete arguments only.', autoFixAvailable: false },
-        fingerprint: hashFingerprint('PS-003', file, baseLine, name, 'shell-meta'),
-      });
+        fingerprintParts: [name, 'shell-meta'],
+      }));
       break;
     }
   }
 
-  // 4. Unknown server (warning)
-  // Heuristic: extract package from args (if npx -y <pkg>) or use command itself.
+  // Untrusted-server warning (only if no critical finding fired for this server).
   let packageRef = cmd;
-  if (cmd === 'npx' || cmdBase === 'npx') {
+  if (cmdBase === 'npx') {
     const pkgArg = args.find((a) => typeof a === 'string' && !a.startsWith('-'));
     if (pkgArg) packageRef = pkgArg;
   }
-  const isTrusted = isTrustedServer(packageRef, trusted);
   const isInterpreter = INTERPRETER_BINS.has(cmdBase);
-  if (!isTrusted && !findings.length && !isInterpreter) {
-    // Only warn if it's not already a critical finding for this server.
+  if (out.length === 0 && !isTrustedServer(packageRef, trusted) && !isInterpreter) {
     const sev: Severity = 'medium';
-    findings.push({
+    out.push(buildFinding({
       ruleId: 'PS-003',
-      detectorId: 'mcp-stdio-rce',
+      detectorId: DETECTOR_ID,
       severity: sev,
       title: `MCP server "${name}" is not in the trusted-server allowlist`,
       description: `Package or binary "${packageRef}" does not match any prefix in the trusted list (${trusted.join(', ')}). Review the server's source before trusting it; MCP STDIO grants subprocess execution.`,
-      location: { path: file, startLine: baseLine },
-      evidence: {
-        primarySource: 'OX Security 2026-04-16',
-        references: REFS,
-      },
+      filePath: file, line: baseLine,
+      evidence: EVIDENCE.ox(),
       remediation: { summary: 'Add the server to .promptshield.yaml mcp.trusted_servers if you have audited it.', autoFixAvailable: false },
-      fingerprint: hashFingerprint('PS-003', file, baseLine, name, 'untrusted'),
-    });
+      fingerprintParts: [name, 'untrusted'],
+    }));
   }
 
-  return findings;
+  return out;
 }
 
 const detector: Detector = {
   id: 'PS-003',
   name: 'MCP STDIO RCE',
-  description: 'Detects MCP server configurations vulnerable to the OX Security disclosure of April 2026.',
+  description:
+    'Detects MCP server configurations vulnerable to OX Security (2026-04-16): shell -c invocation, command interpolation, shell-meta args, untrusted servers, and streamable-http URLs with interpolation or untrusted origins.',
+
   async scan(ctx: DetectorContext): Promise<Finding[]> {
     const findings: Finding[] = [];
     const mcpFiles = [
@@ -143,27 +156,13 @@ const detector: Detector = {
       ...ctx.discovery.claude.mcpFiles,
       ...ctx.discovery.cursor.mcpFiles,
     ];
-
     for (const file of mcpFiles) {
-      let content: string;
-      try {
-        content = await readFile(file, 'utf8');
-      } catch {
-        continue;
-      }
-      let doc: any;
-      try {
-        doc = parseJsonc(content);
-      } catch {
-        continue;
-      }
+      const { text, doc } = await loadJsonc<any>(file);
       const servers = doc?.mcpServers ?? doc?.mcp_servers ?? doc?.servers;
       if (!servers || typeof servers !== 'object') continue;
       for (const [name, entry] of Object.entries(servers)) {
         if (entry && typeof entry === 'object') {
-          findings.push(
-            ...inspectServer(name, entry as McpServerEntry, file, content, ctx.config.mcp.trusted_servers),
-          );
+          findings.push(...findingsForServer(name, entry as McpServerEntry, file, text, ctx.config.mcp.trusted_servers));
         }
       }
     }

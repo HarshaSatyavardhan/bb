@@ -18,22 +18,21 @@ describe('fixer', () => {
     expect(plan.operations.some((op) => op.ruleId === 'PS-001')).toBe(true);
   });
 
-  it('applyFixes mutates the file content (in a tmp copy)', async () => {
+  it('applyFixes mutates the alwaysAllow JSON array (in a tmp copy)', async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), 'ps-fix-'));
     await mkdir(path.join(tmp, '.bob'), { recursive: true });
-    const srcSettings = path.join(FIXTURES, 'bob-vulnerable', '.bob', 'settings.yaml');
-    const dstSettings = path.join(tmp, '.bob', 'settings.yaml');
-    await cp(srcSettings, dstSettings);
+    const dst = path.join(tmp, '.bob', 'mcp.json');
+    await cp(path.join(FIXTURES, 'bob-vulnerable', '.bob', 'mcp.json'), dst);
 
     const result = await runScan({ rootDir: tmp, detectorFilter: ['PS-001'] });
     expect(result.findings.length).toBeGreaterThan(0);
     const plan = await planFixes(result.findings, tmp);
     await applyFixes(plan.operations);
 
-    const after = await readFile(dstSettings, 'utf8');
+    const after = await readFile(dst, 'utf8');
     expect(after).toContain('REMOVED by PromptShield (PS-001)');
 
-    // Re-scan: PS-001 should be clean now
+    // Re-scan: PS-001 alwaysAllow findings should drop.
     const after2 = await runScan({ rootDir: tmp, detectorFilter: ['PS-001'] });
     expect(after2.findings.length).toBeLessThan(result.findings.length);
   });

@@ -1,60 +1,44 @@
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
-import { parse as parseYaml } from 'yaml';
 import type { Detector, DetectorContext, Finding, Severity } from '../types/index.js';
 import { parseFrontmatter } from '../utils/yaml-frontmatter.js';
-import { hashFingerprint, findLineForString, snippetAround } from '../utils/fs.js';
+import { findLineForString, snippetAround } from '../utils/fs.js';
+import { loadYaml } from '../utils/config-loader.js';
+import { buildFinding } from '../utils/finding-builder.js';
+import { EVIDENCE } from '../utils/evidence.js';
+import { readFile } from 'node:fs/promises';
 
+const DETECTOR_ID = 'custom-mode-privilege-escalation';
 const PERMISSIVE_REGEXES = new Set(['', '.*', '.+', '^.*$', '^.+$', '.*?']);
-
-const REFS = [
-  'https://arxiv.org/abs/2601.17548',
-  'https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/',
-  'https://bob.ibm.com/docs/ide/features/modes',
-];
 
 interface ModeEval {
   hasCommand: boolean;
   hasEdit: boolean;
-  hasRead: boolean;
   hasMcp: boolean;
   hasBrowser: boolean;
+  hasReadOnly: boolean;
   fileRegex?: string;
-  hasWhenToUse: boolean;
-  hasRoleDefinition: boolean;
-  purpose?: string;
 }
 
 function evalGroups(groups: unknown[]): ModeEval {
-  const set = new Set(
-    (Array.isArray(groups) ? groups : []).map((g) => String(g).toLowerCase()),
-  );
+  const set = new Set((Array.isArray(groups) ? groups : []).map((g) => String(g).toLowerCase()));
+  const hasCommand = set.has('command') || set.has('bash') || set.has('shell') || set.has('execute');
+  const hasEdit = set.has('edit') || set.has('write');
+  const hasMcp = set.has('mcp');
+  const hasBrowser = set.has('browser');
+  const hasRead = set.has('read');
   return {
-    hasCommand: set.has('command') || set.has('bash') || set.has('shell') || set.has('execute'),
-    hasEdit: set.has('edit') || set.has('write'),
-    hasRead: set.has('read'),
-    hasMcp: set.has('mcp'),
-    hasBrowser: set.has('browser'),
-    fileRegex: undefined,
-    hasWhenToUse: false,
-    hasRoleDefinition: false,
+    hasCommand, hasEdit, hasMcp, hasBrowser,
+    hasReadOnly: hasRead && !hasCommand && !hasEdit && !hasMcp && !hasBrowser,
   };
 }
 
-/**
- * Decide severity using BOTH guardrails real Bob ships with:
- *  - mode-level fileRegex (some forks / Claude skills support this)
- *  - presence of `.bob/rules-<slug>/` directory (real Bob's actual mechanism)
- */
 function severityFor(e: ModeEval, hasRulesDir: boolean): Severity | null {
-  const tooBroad =
-    (!e.fileRegex || PERMISSIVE_REGEXES.has(e.fileRegex)) && !hasRulesDir;
-  if (e.hasCommand && tooBroad) return 'critical';
-  if (e.hasMcp && tooBroad) return 'high';
-  if (e.hasBrowser && tooBroad) return 'high';
-  if (e.hasEdit && tooBroad) return 'high';
-  // Pure read-only modes (only `read` group, no edit/command/mcp/browser) are
-  // bounded by definition; do not flag them even without a rules-<slug>/ dir.
+  if (e.hasReadOnly) return null;
+  const tooBroad = (!e.fileRegex || PERMISSIVE_REGEXES.has(e.fileRegex)) && !hasRulesDir;
+  if (!tooBroad) return null;
+  if (e.hasCommand) return 'critical';
+  if (e.hasMcp || e.hasBrowser || e.hasEdit) return 'high';
   return null;
 }
 
@@ -66,64 +50,17 @@ function describeBreadth(e: ModeEval): string {
   return 'read';
 }
 
-function makeFinding(args: {
-  file: string;
-  line: number;
-  modeName: string;
-  evaluation: ModeEval;
-  severity: Severity;
-  source: 'bob-mode' | 'claude-skill';
-  hasRulesDir: boolean;
-  snippet?: string;
-}): Finding {
-  const breadth = describeBreadth(args.evaluation);
-  const guardHint = args.source === 'bob-mode'
-    ? `Add a \`.bob/rules-<slug>/\` directory with explicit behavioural rules, or restrict the mode's groups list.`
-    : `Add a fileRegex restricting "${args.modeName}" to the smallest set of files it actually needs.`;
-  return {
-    ruleId: 'PS-004',
-    detectorId: 'custom-mode-privilege-escalation',
-    severity: args.severity,
-    title: `${args.source === 'bob-mode' ? 'Custom mode' : 'Skill'} "${args.modeName}" grants ${breadth} permission with no behavioural guardrail`,
-    description: `The ${args.source === 'bob-mode' ? 'Bob custom mode' : 'Claude skill'} "${args.modeName}" exposes ${breadth} capabilities ${args.source === 'bob-mode' ? 'with no rules-<slug>/ guardrail directory' : 'without a narrow fileRegex'}. Per arXiv 2601.17548 and Snyk ToxicSkills, this is the AI-agent equivalent of a Linux capability over-grant.`,
-    location: { path: args.file, startLine: args.line, snippet: args.snippet },
-    evidence: {
-      primarySource: 'arXiv 2601.17548 + Snyk ToxicSkills 2026-02-05',
-      references: REFS,
-    },
-    remediation: {
-      summary: guardHint,
-      autoFixAvailable: false,
-    },
-    fingerprint: hashFingerprint('PS-004', args.file, args.line, args.modeName),
-  };
-}
-
 async function dirExists(p: string): Promise<boolean> {
-  try {
-    const s = await stat(p);
-    return s.isDirectory();
-  } catch {
-    return false;
-  }
+  try { return (await stat(p)).isDirectory(); } catch { return false; }
 }
 
 async function scanBobModes(file: string): Promise<Finding[]> {
   const out: Finding[] = [];
-  const content = await readFile(file, 'utf8');
-  let doc: any;
-  try {
-    doc = parseYaml(content);
-  } catch {
-    return out;
-  }
-  // Real Bob uses `customModes` (camelCase). Tolerate the snake form too
-  // for any project that copied the spec verbatim.
+  const { text, doc } = await loadYaml<any>(file);
   const modes = doc?.customModes ?? doc?.custom_modes;
   if (!Array.isArray(modes)) return out;
 
-  const bobDir = path.dirname(file); // .../.bob
-
+  const bobDir = path.dirname(file);
   for (const m of modes) {
     if (!m || typeof m !== 'object') continue;
     const slug = typeof m.slug === 'string' ? m.slug : undefined;
@@ -133,27 +70,26 @@ async function scanBobModes(file: string): Promise<Finding[]> {
 
     const evalRes = evalGroups(m.groups ?? []);
     evalRes.fileRegex = typeof m.fileRegex === 'string' ? m.fileRegex : undefined;
-    evalRes.hasWhenToUse = typeof m.whenToUse === 'string' && m.whenToUse.length > 0;
-    evalRes.hasRoleDefinition =
-      typeof m.roleDefinition === 'string' && m.roleDefinition.length > 0;
-    evalRes.purpose = purpose;
 
-    // Real Bob guardrail: .bob/rules-<slug>/ directory present.
-    const rulesDir = slug ? path.join(bobDir, `rules-${slug}`) : undefined;
-    const hasRulesDir = rulesDir ? await dirExists(rulesDir) : false;
-
+    const hasRulesDir = slug ? await dirExists(path.join(bobDir, `rules-${slug}`)) : false;
     const sev = severityFor(evalRes, hasRulesDir);
     if (!sev) continue;
-    const line = findLineForString(content, slug ? `slug: ${slug}` : `name: ${name}`);
-    out.push(makeFinding({
-      file,
-      line,
-      modeName: name,
-      evaluation: evalRes,
+
+    const breadth = describeBreadth(evalRes);
+    const line = findLineForString(text, slug ? `slug: ${slug}` : `name: ${name}`);
+    out.push(buildFinding({
+      ruleId: 'PS-004',
+      detectorId: DETECTOR_ID,
       severity: sev,
-      source: 'bob-mode',
-      hasRulesDir,
-      snippet: snippetAround(content, line),
+      title: `Custom mode "${name}" grants ${breadth} permission with no behavioural guardrail`,
+      description: `The Bob custom mode "${name}" exposes ${breadth} capabilities with no \`.bob/rules-${slug ?? '<slug>'}/\` guardrail directory. Per arXiv 2601.17548 and Snyk ToxicSkills, this is the AI-agent equivalent of a Linux capability over-grant.`,
+      filePath: file, line, snippet: snippetAround(text, line),
+      evidence: EVIDENCE.customMode(),
+      remediation: {
+        summary: `Add a \`.bob/rules-${slug ?? '<slug>'}/\` directory with explicit behavioural rules, or restrict the mode's groups list.`,
+        autoFixAvailable: false,
+      },
+      fingerprintParts: [name, slug ?? ''],
     }));
   }
   return out;
@@ -161,35 +97,37 @@ async function scanBobModes(file: string): Promise<Finding[]> {
 
 async function scanClaudeSkill(file: string): Promise<Finding[]> {
   const out: Finding[] = [];
-  const content = await readFile(file, 'utf8');
+  let content: string;
+  try { content = await readFile(file, 'utf8'); } catch { return out; }
   const fm = parseFrontmatter<any>(content);
   if (!fm.data) return out;
-
   const purpose = String(fm.data.purpose ?? '').toLowerCase();
   if (purpose === 'red-team' || purpose === 'pentest') return out;
 
   const tools = Array.isArray(fm.data['allowed-tools']) ? fm.data['allowed-tools'] : [];
-  // No tools declared => not in scope for this detector.
   if (tools.length === 0) return out;
   const evalRes = evalGroups(tools);
-  evalRes.fileRegex =
-    typeof fm.data.fileRegex === 'string' ? fm.data.fileRegex :
-    typeof fm.data.file_regex === 'string' ? fm.data.file_regex : undefined;
-  evalRes.hasWhenToUse = typeof fm.data.whenToUse === 'string' && fm.data.whenToUse.length > 0;
+  evalRes.fileRegex = typeof fm.data.fileRegex === 'string' ? fm.data.fileRegex
+    : typeof fm.data.file_regex === 'string' ? fm.data.file_regex : undefined;
 
-  // Claude skills don't have a rules-<slug>/ directory analogue; only fileRegex.
   const sev = severityFor(evalRes, false);
   if (!sev) return out;
-  const name = String(fm.data.name ?? file.split('/').slice(-2, -1)[0] ?? 'unnamed');
-  out.push(makeFinding({
-    file,
-    line: 1,
-    modeName: name,
-    evaluation: evalRes,
+
+  const name = String(fm.data.name ?? path.basename(path.dirname(file)));
+  const breadth = describeBreadth(evalRes);
+  out.push(buildFinding({
+    ruleId: 'PS-004',
+    detectorId: DETECTOR_ID,
     severity: sev,
-    source: 'claude-skill',
-    hasRulesDir: false,
-    snippet: snippetAround(content, 1, 5),
+    title: `Skill "${name}" grants ${breadth} permission with no behavioural guardrail`,
+    description: `The Claude skill "${name}" exposes ${breadth} capabilities without a narrow fileRegex.`,
+    filePath: file, line: 1, snippet: snippetAround(content, 1, 5),
+    evidence: EVIDENCE.customMode(),
+    remediation: {
+      summary: `Add a fileRegex restricting "${name}" to the smallest set of files it actually needs.`,
+      autoFixAvailable: false,
+    },
+    fingerprintParts: [name],
   }));
   return out;
 }
@@ -199,17 +137,11 @@ const detector: Detector = {
   name: 'Custom-mode privilege escalation',
   description:
     'Detects Bob custom modes (groups: command/mcp/browser/edit) without a `.bob/rules-<slug>/` guardrail directory, and Claude skills with broad `allowed-tools` without a narrow fileRegex.',
+
   async scan(ctx: DetectorContext): Promise<Finding[]> {
     const findings: Finding[] = [];
-    for (const f of ctx.discovery.bob.modeFiles) {
-      findings.push(...(await scanBobModes(f)));
-    }
-    // Claude skills only - Bob skills have a much simpler frontmatter
-    // schema (just name + description) and don't declare tool capabilities,
-    // so they aren't a privilege-escalation target on the Bob side.
-    for (const f of ctx.discovery.claude.skillFiles) {
-      findings.push(...(await scanClaudeSkill(f)));
-    }
+    for (const f of ctx.discovery.bob.modeFiles) findings.push(...(await scanBobModes(f)));
+    for (const f of ctx.discovery.claude.skillFiles) findings.push(...(await scanClaudeSkill(f)));
     return findings;
   },
 };
