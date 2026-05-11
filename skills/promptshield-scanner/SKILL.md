@@ -9,17 +9,20 @@ Use this Skill when the user asks about AI security, mentions Bob/Claude/Cursor 
 
 ## Workflow
 
-1. Run the following command from the project root:
+1. Prefer MCP first: call `scan_project` on the active workspace root.
+2. If MCP is unavailable, run CLI fallback:
 
    ```bash
    npx promptshield --json
    ```
 
-2. Parse the JSON output. Group findings by `severity` (`critical`, `high`, `medium`, `low`).
-3. For each Critical or High finding, report: file path, line, rule ID, and one-sentence remediation.
-4. If any finding has `remediation.autoFixAvailable: true`, suggest running `npx promptshield fix` (dry-run first).
+3. Parse findings and group by `severity` (`critical`, `high`, `medium`, `low`, `info`).
+4. For each Critical or High finding, report: file path, line, rule ID, and one-sentence remediation.
+5. If findings are present, suggest:
+   - `explain_finding` for deep context on critical entries
+   - `apply_fix` dry-run for auto-fixable findings
 
 ## Rules
 
 - Do not modify files.
-- Do not run `npx promptshield fix --apply` without explicit user confirmation.
+- Do not apply fixes without explicit user confirmation.

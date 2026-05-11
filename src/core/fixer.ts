@@ -12,7 +12,8 @@ export interface FixOperation {
 }
 
 export interface FixResult {
-  patch: string;
+  patchPreview: string;
+  patchFormat: 'preview';
   operations: FixOperation[];
   unfixable: Finding[];
 }
@@ -37,16 +38,14 @@ async function fixChainedCommandBypass(finding: Finding): Promise<FixOperation |
   // JSON-array entry: "echo", or "Bash(echo)"  (Bob's alwaysAllow + Claude's permissions.allow + Cursor's autoRun.allow)
   const jsonMatch = line.match(SHELL_TOKEN_RE);
   if (jsonMatch) {
-    const indent = jsonMatch[1];
     const cmd = jsonMatch[2];
-    const trailingComma = jsonMatch[3];
     return {
       ruleId: 'PS-001',
       file,
       line: finding.location.startLine,
       description: `Remove dangerous shell utility "${cmd}" from allowlist`,
       before: `${line}\n`,
-      after: `${indent}// REMOVED by PromptShield (PS-001): "${cmd}" was vulnerable to chained-command bypass${trailingComma ? '' : ''}\n`,
+      after: '',
     };
   }
   return null;
@@ -72,13 +71,17 @@ async function fixCommentAndControlWorkflow(finding: Finding): Promise<FixOperat
   };
 }
 
-function buildUnifiedPatch(rootDir: string, ops: FixOperation[]): string {
+function buildPatchPreview(rootDir: string, ops: FixOperation[]): string {
   const byFile = new Map<string, FixOperation[]>();
   for (const op of ops) {
     if (!byFile.has(op.file)) byFile.set(op.file, []);
     byFile.get(op.file)!.push(op);
   }
-  const out: string[] = [];
+  const out: string[] = [
+    '# PromptShield remediation preview',
+    '# This is a preview format and is not guaranteed to be git-apply compatible.',
+    '',
+  ];
   for (const [file, list] of byFile) {
     const rel = path.relative(rootDir, file).split(path.sep).join('/') || file;
     out.push(`--- a/${rel}`);
@@ -110,10 +113,18 @@ export async function planFixes(findings: Finding[], rootDir: string): Promise<F
   }
 
   return {
-    patch: buildUnifiedPatch(rootDir, operations),
+    patchPreview: buildPatchPreview(rootDir, operations),
+    patchFormat: 'preview',
     operations,
     unfixable,
   };
+}
+
+function normalizeJsonArraySyntax(content: string): string {
+  return content
+    .replace(/,\s*(\])/g, '$1')
+    .replace(/(\[)\s*,/g, '$1')
+    .replace(/,\s*,/g, ',');
 }
 
 export async function applyFixes(ops: FixOperation[]): Promise<void> {
@@ -129,6 +140,9 @@ export async function applyFixes(ops: FixOperation[]): Promise<void> {
       if (content.includes(op.before)) {
         content = content.replace(op.before, op.after);
       }
+    }
+    if (file.endsWith('.json')) {
+      content = normalizeJsonArraySyntax(content);
     }
     await writeFile(file, content, 'utf8');
   }

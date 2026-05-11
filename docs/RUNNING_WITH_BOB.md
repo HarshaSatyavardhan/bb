@@ -232,6 +232,8 @@ cat .promptshield-fixes.patch
 node dist/cli.js fix --root /tmp/copy-of-vulnerable --apply
 ```
 
+`.promptshield-fixes.patch` is a remediation preview artifact. It is intended for review and may not be directly `git apply` compatible.
+
 ### Install globally (no `node dist/...`)
 Once we publish to npm:
 ```bash

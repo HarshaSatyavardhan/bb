@@ -72,7 +72,7 @@ async function runFixCmd(opts: FixCliOptions): Promise<void> {
   }
 
   const patchPath = path.join(root, '.promptshield-fixes.patch');
-  await writeFile(patchPath, plan.patch, 'utf8');
+  await writeFile(patchPath, plan.patchPreview, 'utf8');
   process.stdout.write(`Wrote ${plan.operations.length} fix operation(s) to ${patchPath}\n`);
   for (const op of plan.operations) {
     process.stdout.write(`  ${op.ruleId}  ${path.relative(root, op.file)}:${op.line}  ${op.description}\n`);
@@ -146,8 +146,10 @@ program
   .description('List all available detectors')
   .action(() => listDetectors());
 
-// Manually handle --mcp top-level (commander preAction won't fire without subcommand resolution)
-if (process.argv.includes('--mcp')) {
+const cliArgs = process.argv.slice(2);
+const runAsMcp = cliArgs.length === 1 && cliArgs[0] === '--mcp';
+
+if (runAsMcp) {
   startMcp().catch((err) => {
     // eslint-disable-next-line no-console
     console.error('MCP server error:', err);

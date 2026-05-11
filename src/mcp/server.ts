@@ -131,31 +131,46 @@ export async function startMcpServer(opts: McpOptions): Promise<void> {
       inputSchema: {
         rootDir: z.string(),
         apply: z.boolean().optional().describe('If true, write changes to disk. Default false (dry-run).'),
+        includePatchPreview: z
+          .boolean()
+          .optional()
+          .describe('If true, include remediation preview text in response. Default false.'),
       },
     },
-    async ({ rootDir, apply }) => {
+    async ({ rootDir, apply, includePatchPreview }) => {
       const result = await runScan({ rootDir, toolVersion: opts.toolVersion });
       const plan = await planFixes(result.findings, rootDir);
       if (apply) await applyFixes(plan.operations);
+      const response: {
+        applied: boolean;
+        operations: Array<{
+          ruleId: string;
+          file: string;
+          line: number;
+          description: string;
+        }>;
+        unfixableCount: number;
+        patchFormat: 'preview';
+        patchPreview?: string;
+      } = {
+        applied: !!apply,
+        operations: plan.operations.map((op) => ({
+          ruleId: op.ruleId,
+          file: op.file,
+          line: op.line,
+          description: op.description,
+        })),
+        unfixableCount: plan.unfixable.length,
+        patchFormat: plan.patchFormat,
+      };
+      if (includePatchPreview) {
+        response.patchPreview = plan.patchPreview;
+      }
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(
-              {
-                applied: !!apply,
-                operations: plan.operations.map((op) => ({
-                  ruleId: op.ruleId,
-                  file: op.file,
-                  line: op.line,
-                  description: op.description,
-                })),
-                unfixableCount: plan.unfixable.length,
-                patch: plan.patch,
-              },
-              null,
-              2,
-            ),
+            text: JSON.stringify(response, null, 2),
           },
         ],
       };

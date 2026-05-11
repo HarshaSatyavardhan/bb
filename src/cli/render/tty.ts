@@ -58,6 +58,9 @@ export function renderTty(result: ScanResult, rootDir: string): string {
     `${c('bold', 'PromptShield')} ${c('gray', `v${result.toolVersion}`)}   ⏱  scanned ${result.scannedFiles.length} files in ${result.durationMs}ms`,
   );
   out.push(c('gray', `signatures: ${result.signaturesVersion}  detectors: ${result.detectorsRun.join(', ')}`));
+  if (result.detectorErrors.length > 0) {
+    out.push(c('yellow', `warnings: ${result.detectorErrors.length} detector(s) failed during scan`));
+  }
   out.push('');
 
   if (result.findings.length === 0) {
@@ -86,6 +89,12 @@ export function renderTty(result: ScanResult, rootDir: string): string {
   );
   const summary = `${result.detectorsRun.length} detectors run.  ${result.findings.length} findings  (${counts.critical} critical, ${counts.high} high, ${counts.medium} medium, ${counts.low} low)`;
   out.push(summary);
+  if (result.detectorErrors.length > 0) {
+    out.push(c('yellow', 'Detector errors:'));
+    for (const detectorError of result.detectorErrors) {
+      out.push(c('yellow', `  - ${detectorError.detectorId}: ${detectorError.message}`));
+    }
+  }
   out.push(`Exit ${result.exitCode}.  See https://promptshield.dev for details.`);
   out.push('');
   return out.join('\n');

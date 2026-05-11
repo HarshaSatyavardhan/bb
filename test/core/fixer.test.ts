@@ -14,7 +14,8 @@ describe('fixer', () => {
     const result = await runScan({ rootDir: path.join(FIXTURES, 'bob-vulnerable') });
     const plan = await planFixes(result.findings, path.join(FIXTURES, 'bob-vulnerable'));
     expect(plan.operations.length).toBeGreaterThan(0);
-    expect(plan.patch).toContain('--- a/');
+    expect(plan.patchPreview).toContain('--- a/');
+    expect(plan.patchFormat).toBe('preview');
     expect(plan.operations.some((op) => op.ruleId === 'PS-001')).toBe(true);
   });
 
@@ -30,7 +31,9 @@ describe('fixer', () => {
     await applyFixes(plan.operations);
 
     const after = await readFile(dst, 'utf8');
-    expect(after).toContain('REMOVED by PromptShield (PS-001)');
+    expect(after).not.toContain('"echo"');
+    expect(after).not.toContain('"cat"');
+    expect(after).not.toContain('"tee"');
 
     // Re-scan: PS-001 alwaysAllow findings should drop.
     const after2 = await runScan({ rootDir: tmp, detectorFilter: ['PS-001'] });

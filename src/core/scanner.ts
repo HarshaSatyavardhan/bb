@@ -25,14 +25,14 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
   );
 
   const allFindings: Finding[] = [];
+  const detectorErrors: ScanResult['detectorErrors'] = [];
   for (const detector of detectors) {
     try {
       const findings = await detector.scan({ discovery, config, signatures });
       allFindings.push(...findings);
     } catch (err) {
-      // Continue on detector errors; record nothing for now.
-      // eslint-disable-next-line no-console
-      console.error(`[promptshield] detector ${detector.id} threw: ${(err as Error).message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      detectorErrors.push({ detectorId: detector.id, message });
     }
   }
 
@@ -47,5 +47,6 @@ export async function runScan(opts: ScanOptions): Promise<ScanResult> {
     toolVersion: opts.toolVersion ?? '1.0.0',
     signaturesVersion: signatures.version,
     exitCode,
+    detectorErrors,
   };
 }

@@ -1,155 +1,262 @@
 # PromptShield
 
-> Universal security scanner for AI coding assistants — IBM Bob, Claude Code, Cursor.
+PromptShield is a security scanner for AI coding assistant configurations across IBM Bob, Claude Code, and Cursor.
 
-One command. Five disclosed exploit classes. Every finding maps to a public CVE or named research disclosure.
+It audits MCP servers, skills, custom modes, and AI workflow files for known exploit classes, then returns structured findings for terminal, JSON, SARIF, HTML, or MCP-based assistant workflows.
 
-```bash
-npx promptshield
-```
+## Judge Demo With IBM Bob (Primary Path)
 
-## What it scans
+Use IBM Bob as the orchestrator and PromptShield as the security engine.
 
-| Rule | Detection | Source |
-|------|-----------|--------|
-| **PS-001** | Chained-command bypass in auto-approve allowlists | PromptArmor (Jan 2026) |
-| **PS-002** | Toxic skills: malicious-pattern signatures + supply-chain hashes | Snyk ToxicSkills (Feb 2026) |
-| **PS-003** | MCP STDIO RCE: shell -c, command interpolation, untrusted servers | OX Security (Apr 2026) |
-| **PS-004** | Custom-mode privilege escalation: missing/permissive `fileRegex` | arXiv 2601.17548 + Snyk |
-| **PS-005** | Comment-and-Control GitHub Actions workflows | Aonan Guan + JHU (Apr 2026) |
-
-## Usage
+1. Build PromptShield locally:
 
 ```bash
-# Scan current dir, pretty TTY output
-npx promptshield
-
-# JSON output for pipelines
-npx promptshield --json
-
-# SARIF for GitHub Code Scanning
-npx promptshield --sarif results.sarif
-
-# HTML report
-npx promptshield --html report.html
-
-# Auto-fix (dry-run by default)
-npx promptshield fix
-npx promptshield fix --apply
-
-# Filter to specific detectors
-npx promptshield --filter PS-001 PS-003
-
-# List detectors
-npx promptshield list-detectors
-
-# MCP server mode (for Bob/Claude/Cursor to invoke as a tool)
-npx promptshield --mcp
+npm ci
+npm run build
+node dist/cli.js --version
 ```
 
-## GitHub Actions integration
-
-```yaml
-name: PromptShield
-on: [push, pull_request]
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-      - run: npx promptshield --sarif results.sarif --exit-zero
-      - uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
-```
-
-Three lines, and findings appear in your GitHub Security tab.
-
-## Run with IBM Bob
-
-**→ Full step-by-step guide: [`docs/RUNNING_WITH_BOB.md`](docs/RUNNING_WITH_BOB.md)** — download Bob, install, wire it up to PromptShield, and run a sample scan in about 10 minutes.
-
-## Bob integration (verified against [IBM/bob-demo](https://github.com/IBM/bob-demo))
-
-PromptShield uses the **real Bob schema** as documented in IBM's official demo repo:
-
-### Bob Skills (4-dash frontmatter)
-Drop the bundled skills under `~/.bob/skills/` or `.bob/skills/`:
-
-```
-skills/
-  promptshield-scanner/SKILL.md   # 4-dash frontmatter, name + description
-  promptshield-fixer/SKILL.md
-  promptshield-reporter/SKILL.md
-  promptshield-redteam/SKILL.md
-```
-
-### Bob Custom Modes (`customModes` + `slug` + `roleDefinition`)
-`modes/custom_modes.yaml` ships two modes using the real Bob schema:
-
-- **`security-auditor`** (read-only audit) — guarded by `modes/rules-security-auditor/`
-- **`promptshield-redteam`** (demo on test-fixtures) — guarded by `modes/rules-promptshield-redteam/`
-
-Each mode has a sibling `rules-<slug>/` directory containing behavioural rules — Bob's actual guardrail mechanism (not `fileRegex`).
-
-### MCP integration
-
-Add to `.bob/mcp.json` (Bob), `.mcp.json` (Claude Code), or `.cursor/mcp.json` (Cursor):
+2. Register PromptShield in Bob via `~/.bob/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "promptshield": {
-      "command": "npx",
-      "args": ["-y", "promptshield", "--mcp"]
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/promptshield/dist/cli.js", "--mcp"],
+      "disabled": false,
+      "alwaysAllow": [
+        "scan_project",
+        "list_detectors",
+        "explain_finding"
+      ]
     }
   }
 }
 ```
 
-Then ask the assistant: *"scan this repo for AI security issues"*.
+Do not add `apply_fix` to `alwaysAllow`; keep it approval-gated.
 
-## Configuration
+3. In Bob, open `test-fixtures/bob-vulnerable` and prompt:
 
-Drop a `.promptshield.yaml` at the project root:
-
-```yaml
-ignore:
-  - ruleId: PS-001
-    path: ^vendor/
-    reason: third-party config we don't control
-severityOverrides:
-  PS-003: high   # downgrade from default critical
-mcp:
-  trusted_servers:
-    - "@modelcontextprotocol/"
-    - "@anthropic-ai/"
-    - "@my-org/"
+```text
+use the promptshield MCP server to call scan_project on the current workspace and summarize findings by severity
 ```
 
-## Architecture
+Expected result: 17 findings across detectors PS-001 through PS-005 on the vulnerable fixture.
 
-- **Discoverer** — globs Bob/Claude/Cursor configs + workflows from the project root
-- **5 detectors** — each maps to a public disclosure; every finding is auditable
-- **Aggregator** — dedups by fingerprint, applies user ignores and severity overrides
-- **Renderers** — TTY, JSON, SARIF v2.1.0, single-page HTML
-- **Fixer** — patch-based, dry-run by default
-- **MCP server** — same binary, `--mcp` flag, exposes 4 tools over STDIO
+4. Ask Bob to explain one critical issue:
 
-## Design tenets
+```text
+call explain_finding for the first critical result and show remediation
+```
 
-- **Offline by default.** No telemetry. No auto-update. Network is opt-in.
-- **Evidence-based.** Every detector cites a public disclosure. No LLM heuristics in the detection path.
-- **Auto-fix is opt-in and reversible.** Patch files first; `--apply` only on explicit request.
-- **Minimal dep tree.** A security tool that's itself a supply-chain risk is worse than no tool.
+5. Optionally preview remediation:
 
-## License
+```text
+call apply_fix in dry-run mode and summarize proposed changes
+```
 
-MIT.
+For a full step-by-step walkthrough, use [docs/RUNNING_WITH_BOB.md](docs/RUNNING_WITH_BOB.md).
 
-## Prior art
+## What PromptShield Detects
 
-- [`everything-claude-code` / `ecc-agentshield`](https://github.com/affaan-m/everything-claude-code) — proved the category for Claude Code; PromptShield generalizes to Bob + Cursor and ships a Bob-native integration.
+- **PS-001**: chained-command allowlist bypass risks
+- **PS-002**: toxic skill and prompt-injection signatures
+- **PS-003**: MCP stdio command-injection and shell execution risks
+- **PS-004**: over-privileged custom modes without guardrail rules
+- **PS-005**: comment-and-control workflow prompt injection in CI
+
+## CLI Usage (Fallback)
+
+```bash
+# Default scan (TTY)
+npx promptshield --root /path/to/repo
+
+# JSON for tooling
+npx promptshield --root /path/to/repo --json
+
+# SARIF for GitHub code scanning
+npx promptshield --root /path/to/repo --sarif results.sarif
+
+# HTML report
+npx promptshield --root /path/to/repo --html report.html
+
+# Auto-fix preview (dry-run)
+npx promptshield fix --root /path/to/repo
+```
+
+## MCP Tools
+
+PromptShield exposes four MCP tools when started with `--mcp`:
+
+- `scan_project`
+- `list_detectors`
+- `explain_finding`
+- `apply_fix`
+
+## Bob Skills And Custom Modes
+
+This repository ships Bob-ready assets:
+
+- Skills in [skills](skills)
+- Custom modes and rules in [modes](modes)
+
+These are designed so Bob can use PromptShield MCP tools first, with CLI fallback only when MCP is unavailable.
+
+## Reports
+
+- JSON for automation and pipelines
+- SARIF for code scanning integrations
+- HTML for security review handoff
+
+## Development
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run lint
+```
+
+## Why IBM Bob + PromptShield
+
+IBM Bob provides the agent workflow and tool orchestration in-repo. PromptShield provides deterministic security analysis and remediation guidance for AI-assistant configuration risk. Together they make AI-assisted development safer and faster to review.
+
+## Additional Docs
+
+- Bob setup and guided demo: [docs/RUNNING_WITH_BOB.md](docs/RUNNING_WITH_BOB.md)
+- Submission package: [SUBMISSION.md](SUBMISSION.md)
+# PromptShield
+
+PromptShield is a security scanner for AI coding assistant configurations across IBM Bob, Claude Code, and Cursor.
+
+It audits MCP servers, skills, custom modes, and AI workflow files for known exploit classes, then returns structured findings for terminal, JSON, SARIF, HTML, or MCP-based assistant workflows.
+
+## Judge Demo With IBM Bob (Primary Path)
+
+Use IBM Bob as the orchestrator and PromptShield as the security engine.
+
+1. Build PromptShield locally:
+
+```bash
+npm ci
+npm run build
+node dist/cli.js --version
+```
+
+2. Register PromptShield in Bob via `~/.bob/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "promptshield": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/promptshield/dist/cli.js", "--mcp"],
+      "disabled": false,
+      "alwaysAllow": [
+        "scan_project",
+        "list_detectors",
+        "explain_finding"
+      ]
+    }
+  }
+}
+```
+
+Do not add `apply_fix` to `alwaysAllow`; keep it approval-gated.
+
+3. In Bob, open `test-fixtures/bob-vulnerable` and prompt:
+
+```text
+use the promptshield MCP server to call scan_project on the current workspace and summarize findings by severity
+```
+
+Expected result: 17 findings across detectors PS-001 through PS-005 on the vulnerable fixture.
+
+4. Ask Bob to explain one critical issue:
+
+```text
+call explain_finding for the first critical result and show remediation
+```
+
+5. Optionally preview remediation:
+
+```text
+call apply_fix in dry-run mode and summarize proposed changes
+```
+
+For a full step-by-step walkthrough, use [docs/RUNNING_WITH_BOB.md](docs/RUNNING_WITH_BOB.md).
+
+## What PromptShield Detects
+
+- **PS-001**: chained-command allowlist bypass risks
+- **PS-002**: toxic skill and prompt-injection signatures
+- **PS-003**: MCP stdio command-injection and shell execution risks
+- **PS-004**: over-privileged custom modes without guardrail rules
+- **PS-005**: comment-and-control workflow prompt injection in CI
+
+## CLI Usage (Fallback)
+
+```bash
+# Default scan (TTY)
+npx promptshield --root /path/to/repo
+
+# JSON for tooling
+npx promptshield --root /path/to/repo --json
+
+# SARIF for GitHub code scanning
+npx promptshield --root /path/to/repo --sarif results.sarif
+
+# HTML report
+npx promptshield --root /path/to/repo --html report.html
+
+# Auto-fix preview (dry-run)
+npx promptshield fix --root /path/to/repo
+```
+
+## MCP Tools
+
+PromptShield exposes four MCP tools when started with `--mcp`:
+
+- `scan_project`
+- `list_detectors`
+- `explain_finding`
+- `apply_fix`
+
+## Bob Skills And Custom Modes
+
+This repository ships Bob-ready assets:
+
+- Skills in [skills](skills)
+- Custom modes and rules in [modes](modes)
+
+These are designed so Bob can use PromptShield MCP tools first, with CLI fallback only when MCP is unavailable.
+
+## Reports
+
+- JSON for automation and pipelines
+- SARIF for code scanning integrations
+- HTML for security review handoff
+
+## Development
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run lint
+```
+
+## Why IBM Bob + PromptShield
+
+IBM Bob provides the agent workflow and tool orchestration in-repo. PromptShield provides deterministic security analysis and remediation guidance for AI-assistant configuration risk. Together they make AI-assisted development safer and faster to review.
+
+## Additional Docs
+
+- Bob setup and guided demo: [docs/RUNNING_WITH_BOB.md](docs/RUNNING_WITH_BOB.md)
+- Submission package: [SUBMISSION.md](SUBMISSION.md)

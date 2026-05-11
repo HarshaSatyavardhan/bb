@@ -31,7 +31,8 @@ export async function loadSignatures(): Promise<SignatureDB> {
       continue;
     }
   }
-  // Fallback: empty
-  cached = { version: 'empty', signatures: [] };
-  return cached;
+
+  throw new Error(
+    `PromptShield signatures could not be loaded. Tried: ${candidates.join(', ')}`,
+  );
 }

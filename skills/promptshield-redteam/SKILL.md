@@ -13,7 +13,9 @@ Use this Skill when the user wants a demo, is preparing a presentation, or asks 
 2. For each detector PS-001 through PS-005:
    - Show the vulnerable file.
    - Explain the public disclosure (date and source).
-   - Run `npx promptshield --filter <rule-id>` against the fixture.
+   - Prefer MCP call `scan_project` and filter by `ruleId` in the returned findings.
+   - If MCP is unavailable, run `npx promptshield --filter <rule-id>` against the fixture.
    - Show the finding output.
-3. Run `npx promptshield fix` to show the recommended patches.
-4. Re-run the scan to show the clean state.
+3. Use `apply_fix` dry-run to show recommended fixes.
+4. Only with explicit approval, run `apply_fix` with `apply: true`.
+5. Re-run `scan_project` to show the reduced finding set.
