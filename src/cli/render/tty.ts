@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { ScanResult, Severity } from '../../types/index.js';
+import { countBySeverity } from '../../utils/severity-counts.js';
 
 const isTTY = process.stdout.isTTY === true;
 
@@ -83,10 +84,7 @@ export function renderTty(result: ScanResult, rootDir: string): string {
   }
 
   // Summary
-  const counts = result.findings.reduce(
-    (acc, f) => ((acc[f.severity]++, acc)),
-    { critical: 0, high: 0, medium: 0, low: 0, info: 0 } as Record<Severity, number>,
-  );
+  const counts = countBySeverity(result.findings);
   const summary = `${result.detectorsRun.length} detectors run.  ${result.findings.length} findings  (${counts.critical} critical, ${counts.high} high, ${counts.medium} medium, ${counts.low} low)`;
   out.push(summary);
   if (result.detectorErrors.length > 0) {

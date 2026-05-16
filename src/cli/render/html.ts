@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { Finding, ScanResult, Severity } from '../../types/index.js';
+import { countBySeverity } from '../../utils/severity-counts.js';
 
 const SEVERITY_COLOR: Record<Severity, string> = {
   critical: '#b91c1c',
@@ -8,6 +9,8 @@ const SEVERITY_COLOR: Record<Severity, string> = {
   low: '#0891b2',
   info: '#6b7280',
 };
+
+const PAGE_STYLE = 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#111;}header{border-bottom:1px solid #e5e7eb;padding-bottom:1rem;margin-bottom:1.5rem;}h1{margin:0;font-size:1.75rem;}.meta{color:#6b7280;font-size:.875rem;margin-top:.25rem;}.summary{display:flex;gap:.5rem;margin:1rem 0;flex-wrap:wrap;}.badge{padding:.25rem .75rem;border-radius:999px;color:#fff;font-size:.875rem;font-weight:600;}.finding{margin:.5rem 0;padding:.5rem;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa;}.finding summary{cursor:pointer;display:flex;gap:.75rem;align-items:center;}.finding .sev{color:#fff;padding:.125rem .5rem;border-radius:4px;font-size:.75rem;font-weight:700;}.finding code{background:#e5e7eb;padding:.125rem .375rem;border-radius:3px;font-size:.875rem;}.finding .loc{color:#2563eb;font-family:monospace;font-size:.875rem;}.finding .title{flex:1;font-weight:500;}.finding .body{margin-top:.75rem;padding:.75rem;background:#fff;border-left:3px solid #d1d5db;}.finding .body pre{background:#1e293b;color:#e2e8f0;padding:.75rem;border-radius:4px;overflow-x:auto;font-size:.8125rem;}.finding pre code{background:transparent;padding:0;}footer{margin-top:2rem;color:#6b7280;font-size:.875rem;text-align:center;}';
 
 function escape(s: string): string {
   return s
@@ -39,34 +42,14 @@ function findingHtml(f: Finding, rootDir: string): string {
 }
 
 export function renderHtml(result: ScanResult, rootDir: string): string {
-  const counts = result.findings.reduce(
-    (acc, f) => ((acc[f.severity]++, acc)),
-    { critical: 0, high: 0, medium: 0, low: 0, info: 0 } as Record<Severity, number>,
-  );
+  const counts = countBySeverity(result.findings);
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>PromptShield Report</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #111; }
-  header { border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-  h1 { margin: 0; font-size: 1.75rem; }
-  .meta { color: #6b7280; font-size: 0.875rem; margin-top: 0.25rem; }
-  .summary { display: flex; gap: 0.5rem; margin: 1rem 0; flex-wrap: wrap; }
-  .badge { padding: 0.25rem 0.75rem; border-radius: 999px; color: white; font-size: 0.875rem; font-weight: 600; }
-  .finding { margin: 0.5rem 0; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
-  .finding summary { cursor: pointer; display: flex; gap: 0.75rem; align-items: center; }
-  .finding .sev { color: white; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
-  .finding code { background: #e5e7eb; padding: 0.125rem 0.375rem; border-radius: 3px; font-size: 0.875rem; }
-  .finding .loc { color: #2563eb; font-family: monospace; font-size: 0.875rem; }
-  .finding .title { flex: 1; font-weight: 500; }
-  .finding .body { margin-top: 0.75rem; padding: 0.75rem; background: white; border-left: 3px solid #d1d5db; }
-  .finding .body pre { background: #1e293b; color: #e2e8f0; padding: 0.75rem; border-radius: 4px; overflow-x: auto; font-size: 0.8125rem; }
-  .finding pre code { background: transparent; padding: 0; }
-  footer { margin-top: 2rem; color: #6b7280; font-size: 0.875rem; text-align: center; }
-</style>
+<style>${PAGE_STYLE}</style>
 </head>
 <body>
 <header>

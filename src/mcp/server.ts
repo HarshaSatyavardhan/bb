@@ -9,6 +9,14 @@ interface McpOptions {
   toolVersion: string;
 }
 
+function textResponse(text: string): { content: [{ type: 'text'; text: string }] } {
+  return { content: [{ type: 'text', text }] };
+}
+
+function jsonResponse(value: unknown): { content: [{ type: 'text'; text: string }] } {
+  return textResponse(JSON.stringify(value, null, 2));
+}
+
 export async function startMcpServer(opts: McpOptions): Promise<void> {
   const server = new McpServer(
     { name: 'promptshield', version: opts.toolVersion },
@@ -32,31 +40,20 @@ export async function startMcpServer(opts: McpOptions): Promise<void> {
         includeHome,
         toolVersion: opts.toolVersion,
       });
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                findings: result.findings.map((f) => ({
-                  ruleId: f.ruleId,
-                  severity: f.severity,
-                  title: f.title,
-                  path: f.location.path,
-                  line: f.location.startLine,
-                  fingerprint: f.fingerprint,
-                  source: f.evidence.primarySource,
-                })),
-                scannedFiles: result.scannedFiles.length,
-                detectorsRun: result.detectorsRun,
-                durationMs: result.durationMs,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
-      };
+      return jsonResponse({
+        findings: result.findings.map((f) => ({
+          ruleId: f.ruleId,
+          severity: f.severity,
+          title: f.title,
+          path: f.location.path,
+          line: f.location.startLine,
+          fingerprint: f.fingerprint,
+          source: f.evidence.primarySource,
+        })),
+        scannedFiles: result.scannedFiles.length,
+        detectorsRun: result.detectorsRun,
+        durationMs: result.durationMs,
+      });
     },
   );
 
@@ -66,18 +63,7 @@ export async function startMcpServer(opts: McpOptions): Promise<void> {
       description: 'List all available PromptShield detectors with IDs, names, and source disclosures.',
       inputSchema: {},
     },
-    async () => ({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(
-            ALL_DETECTORS.map((d) => ({ id: d.id, name: d.name, description: d.description })),
-            null,
-            2,
-          ),
-        },
-      ],
-    }),
+    async () => jsonResponse(ALL_DETECTORS.map((d) => ({ id: d.id, name: d.name, description: d.description }))),
   );
 
   server.registerTool(
@@ -93,34 +79,25 @@ export async function startMcpServer(opts: McpOptions): Promise<void> {
       const result = await runScan({ rootDir, toolVersion: opts.toolVersion });
       const finding = result.findings.find((f) => f.fingerprint === fingerprint);
       if (!finding) {
-        return { content: [{ type: 'text', text: `No finding with fingerprint ${fingerprint}` }], isError: true };
+        return { ...textResponse(`No finding with fingerprint ${fingerprint}`), isError: true };
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `# ${finding.ruleId}: ${finding.title}`,
-              '',
-              `**Severity:** ${finding.severity}`,
-              `**File:** ${finding.location.path}:${finding.location.startLine}`,
-              `**Source:** ${finding.evidence.primarySource}`,
-              finding.evidence.cveIds?.length ? `**CVEs:** ${finding.evidence.cveIds.join(', ')}` : '',
-              '',
-              '## Description',
-              finding.description,
-              '',
-              '## Remediation',
-              finding.remediation.summary,
-              '',
-              '## References',
-              ...finding.evidence.references.map((r) => `- ${r}`),
-            ]
-              .filter(Boolean)
-              .join('\n'),
-          },
-        ],
-      };
+      return textResponse([
+        `# ${finding.ruleId}: ${finding.title}`,
+        '',
+        `**Severity:** ${finding.severity}`,
+        `**File:** ${finding.location.path}:${finding.location.startLine}`,
+        `**Source:** ${finding.evidence.primarySource}`,
+        finding.evidence.cveIds?.length ? `**CVEs:** ${finding.evidence.cveIds.join(', ')}` : '',
+        '',
+        '## Description',
+        finding.description,
+        '',
+        '## Remediation',
+        finding.remediation.summary,
+        '',
+        '## References',
+        ...finding.evidence.references.map((r) => `- ${r}`),
+      ].filter(Boolean).join('\n'));
     },
   );
 
@@ -166,14 +143,7 @@ export async function startMcpServer(opts: McpOptions): Promise<void> {
       if (includePatchPreview) {
         response.patchPreview = plan.patchPreview;
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(response, null, 2),
-          },
-        ],
-      };
+      return jsonResponse(response);
     },
   );
 
