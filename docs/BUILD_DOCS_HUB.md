@@ -1,52 +1,20 @@
 # Build Docs Hub
 
-This is the single entry point for all documentation required to build, verify, and reproduce PromptShield.
+This is the canonical entry point for all documentation required to build, verify, and reproduce PromptShield.
 
-## 1) Fast path (build + sanity)
+## Numbered one-by-one reproduction sequence
 
-```bash
-npm ci
-npm run typecheck
-npm run build
-node dist/cli.js --version
-node dist/cli.js list-detectors
-```
+Feed docs to agents in this exact order:
 
-## 2) Deterministic validation path
+1. [01_AGENT_REPRO_START_HERE.md](./01_AGENT_REPRO_START_HERE.md)
+2. [02_AGENT_REPRO_BUILD_AND_VALIDATE.md](./02_AGENT_REPRO_BUILD_AND_VALIDATE.md)
+3. [03_AGENT_REPRO_ENGINEERING_RUNBOOK.md](./03_AGENT_REPRO_ENGINEERING_RUNBOOK.md)
+4. [04_AGENT_REPRO_PROMPT_BOOK.md](./04_AGENT_REPRO_PROMPT_BOOK.md)
+5. [05_AGENT_REPRO_BOB_GUIDE.md](./05_AGENT_REPRO_BOB_GUIDE.md)
 
-Generate disposable validation workspaces and run detector checks:
+## Detailed source docs (reference library)
 
-```bash
-npm run generate:validation-workspaces
-node dist/cli.js scan --root /tmp/promptshield-validation/all-vulnerable --json --quiet --exit-zero
-```
-
-For the complete matrix (CLI, MCP, per-detector checks, acceptance criteria), use:
-
-- [docs/REPLICATION_PLAYBOOK.md](./REPLICATION_PLAYBOOK.md)
-
-## 3) Engineering architecture and operations
-
-For full architecture, detector internals, data flow, contracts, and troubleshooting:
-
-- [docs/ENGINEERING_RUNBOOK.md](./ENGINEERING_RUNBOOK.md)
-
-## 4) Agent/team execution prompts
-
-For reusable role prompts (compactor, bug hunter, verifier, release manager):
-
-- [docs/AGENT_PROMPT_BOOK.md](./AGENT_PROMPT_BOOK.md)
-
-## 5) Bob integration and guided demo
-
-For end-to-end Bob setup and operational examples:
-
-- [docs/RUNNING_WITH_BOB.md](./RUNNING_WITH_BOB.md)
-
-## 6) Recommended team workflow
-
-1. Start here (`BUILD_DOCS_HUB.md`).
-2. Run setup + sanity commands in section 1.
-3. Execute deterministic validation from the replication playbook.
-4. Use the engineering runbook for implementation/debugging details.
-5. Use the agent prompt book to coordinate role-based work consistently.
+- [ENGINEERING_RUNBOOK.md](./ENGINEERING_RUNBOOK.md)
+- [REPLICATION_PLAYBOOK.md](./REPLICATION_PLAYBOOK.md)
+- [AGENT_PROMPT_BOOK.md](./AGENT_PROMPT_BOOK.md)
+- [RUNNING_WITH_BOB.md](./RUNNING_WITH_BOB.md)
