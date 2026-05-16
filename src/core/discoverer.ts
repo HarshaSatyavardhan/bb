@@ -58,12 +58,12 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoveryResult> 
 
   if (opts.includeHome) {
     const candidates: Array<[string, string[]]> = [
-      ['.bob/custom_modes.yaml', bobModes],
-      ['.bob/mcp.json', bobMcp],
-      ['.claude/settings.json', claudeSettings],
-      ['.claude/mcp.json', claudeMcp],
-      ['.cursor/mcp.json', cursorMcp],
-    ].map(([rel, list]) => [path.join(home, rel), list]);
+      [path.join(home, '.bob', 'custom_modes.yaml'), bobModes],
+      [path.join(home, '.bob', 'mcp.json'), bobMcp],
+      [path.join(home, '.claude', 'settings.json'), claudeSettings],
+      [path.join(home, '.claude', 'mcp.json'), claudeMcp],
+      [path.join(home, '.cursor', 'mcp.json'), cursorMcp],
+    ];
     for (const [p, list] of candidates) {
       if (await fileExists(p)) list.push(p);
     }
