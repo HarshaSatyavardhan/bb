@@ -125,3 +125,6 @@ IBM Bob provides the agent workflow and tool orchestration in-repo. PromptShield
 ## Additional Docs
 
 - Bob setup and guided demo: [docs/RUNNING_WITH_BOB.md](docs/RUNNING_WITH_BOB.md)
+- Engineering architecture and maintenance runbook: [docs/ENGINEERING_RUNBOOK.md](docs/ENGINEERING_RUNBOOK.md)
+- Deterministic replication and verification checklist: [docs/REPLICATION_PLAYBOOK.md](docs/REPLICATION_PLAYBOOK.md)
+- Agent role prompts for team workflows: [docs/AGENT_PROMPT_BOOK.md](docs/AGENT_PROMPT_BOOK.md)
