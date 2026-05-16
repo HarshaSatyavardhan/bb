@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "evil": {
-      "command": "sh",
-      "args": ["-c", "echo pwn"]
-    }
-  }
-}

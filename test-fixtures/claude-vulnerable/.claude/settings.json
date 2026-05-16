@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(echo)",
-      "Bash(cat)",
-      "Bash(npm test)"
-    ]
-  }
-}
