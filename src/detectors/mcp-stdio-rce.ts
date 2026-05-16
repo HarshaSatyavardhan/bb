@@ -34,35 +34,51 @@ function findingsForServer(
   if (entry.disabled === true) return [];
   const out: Finding[] = [];
   const baseLine = findLineForString(text, `"${name}"`);
+  const baseSnippet = snippetAround(text, baseLine);
+  const addFinding = (
+    severity: Severity,
+    title: string,
+    description: string,
+    fingerprintSuffix: string,
+    remediationSummary: string,
+    withSnippet = false,
+  ) => {
+    out.push(buildFinding({
+      ruleId: 'PS-003',
+      detectorId: DETECTOR_ID,
+      severity,
+      title,
+      description,
+      filePath: file,
+      line: baseLine,
+      snippet: withSnippet ? baseSnippet : undefined,
+      evidence: EVIDENCE.ox(),
+      remediation: { summary: remediationSummary, autoFixAvailable: false },
+      fingerprintParts: [name, fingerprintSuffix],
+    }));
+  };
 
   // Streamable-HTTP variant: no command field, but URL must be inspected.
   if (entry.type === 'streamable-http' || entry.url) {
     const url = String(entry.url ?? '');
     if (hasInterpolation(url)) {
-      out.push(buildFinding({
-        ruleId: 'PS-003',
-        detectorId: DETECTOR_ID,
-        severity: 'high',
-        title: `MCP streamable-http server "${name}" uses variable interpolation in url`,
-        description: `Server "${name}" uses streamable-http transport with interpolation in the url. If user-controlled input flows into the url, an attacker can pivot to internal services or arbitrary endpoints.`,
-        filePath: file, line: baseLine, snippet: snippetAround(text, baseLine),
-        evidence: EVIDENCE.ox(),
-        remediation: { summary: 'Hardcode the url, or constrain it to a single trusted origin.', autoFixAvailable: false },
-        fingerprintParts: [name, 'http-interp'],
-      }));
+      addFinding(
+        'high',
+        `MCP streamable-http server "${name}" uses variable interpolation in url`,
+        `Server "${name}" uses streamable-http transport with interpolation in the url. If user-controlled input flows into the url, an attacker can pivot to internal services or arbitrary endpoints.`,
+        'http-interp',
+        'Hardcode the url, or constrain it to a single trusted origin.',
+        true,
+      );
     }
     if (url && !/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(url) && !isTrustedServer(url, trusted)) {
-      out.push(buildFinding({
-        ruleId: 'PS-003',
-        detectorId: DETECTOR_ID,
-        severity: 'medium',
-        title: `MCP streamable-http server "${name}" points at untrusted origin`,
-        description: `Server "${name}" connects to ${url}. Streamable-http MCP servers can both leak agent context and inject untrusted tool definitions.`,
-        filePath: file, line: baseLine,
-        evidence: EVIDENCE.ox(),
-        remediation: { summary: 'Verify the origin or proxy through a trusted gateway. Add the origin to .promptshield.yaml mcp.trusted_servers if audited.', autoFixAvailable: false },
-        fingerprintParts: [name, 'http-untrusted'],
-      }));
+      addFinding(
+        'medium',
+        `MCP streamable-http server "${name}" points at untrusted origin`,
+        `Server "${name}" connects to ${url}. Streamable-http MCP servers can both leak agent context and inject untrusted tool definitions.`,
+        'http-untrusted',
+        'Verify the origin or proxy through a trusted gateway. Add the origin to .promptshield.yaml mcp.trusted_servers if audited.',
+      );
     }
     return out;
   }
@@ -73,47 +89,37 @@ function findingsForServer(
   const args = Array.isArray(entry.args) ? entry.args : [];
 
   if (hasInterpolation(cmd)) {
-    out.push(buildFinding({
-      ruleId: 'PS-003',
-      detectorId: DETECTOR_ID,
-      severity: 'critical',
-      title: `MCP server "${name}" uses variable interpolation in command field`,
-      description: `MCP STDIO transport spawns the "command" string as a subprocess. Per OX Security (2026-04-16), interpolation in this field is RCE if any user-controlled input flows in.`,
-      filePath: file, line: baseLine, snippet: snippetAround(text, baseLine),
-      evidence: EVIDENCE.ox(),
-      remediation: { summary: 'Replace interpolation with a hardcoded, audited binary path.', autoFixAvailable: false },
-      fingerprintParts: [name, 'interp'],
-    }));
+    addFinding(
+      'critical',
+      `MCP server "${name}" uses variable interpolation in command field`,
+      'MCP STDIO transport spawns the "command" string as a subprocess. Per OX Security (2026-04-16), interpolation in this field is RCE if any user-controlled input flows in.',
+      'interp',
+      'Replace interpolation with a hardcoded, audited binary path.',
+      true,
+    );
   }
 
   const cmdBase = cmd.split('/').pop()?.toLowerCase() ?? '';
   if (SHELL_BINS.has(cmdBase) && args.includes('-c')) {
-    out.push(buildFinding({
-      ruleId: 'PS-003',
-      detectorId: DETECTOR_ID,
-      severity: 'critical',
-      title: `MCP server "${name}" invokes a shell with -c`,
-      description: `Server "${name}" runs ${cmd} -c <string>. This is the canonical OX Security RCE pattern - any later mutation to the args array becomes shell-injected code.`,
-      filePath: file, line: baseLine, snippet: snippetAround(text, baseLine),
-      evidence: EVIDENCE.ox(),
-      remediation: { summary: 'Move the server to its own binary; do not invoke a shell.', autoFixAvailable: false },
-      fingerprintParts: [name, 'shell-c'],
-    }));
+    addFinding(
+      'critical',
+      `MCP server "${name}" invokes a shell with -c`,
+      `Server "${name}" runs ${cmd} -c <string>. This is the canonical OX Security RCE pattern - any later mutation to the args array becomes shell-injected code.`,
+      'shell-c',
+      'Move the server to its own binary; do not invoke a shell.',
+      true,
+    );
   }
 
   for (const a of args) {
     if (typeof a === 'string' && containsShellMeta(a)) {
-      out.push(buildFinding({
-        ruleId: 'PS-003',
-        detectorId: DETECTOR_ID,
-        severity: 'critical',
-        title: `MCP server "${name}" passes shell metacharacters in args`,
-        description: `An argument to the MCP server contains shell metacharacters: ${JSON.stringify(a)}. If a shell wrapper is involved, this is exploitable.`,
-        filePath: file, line: baseLine,
-        evidence: EVIDENCE.ox(),
-        remediation: { summary: 'Remove shell metacharacters; pass discrete arguments only.', autoFixAvailable: false },
-        fingerprintParts: [name, 'shell-meta'],
-      }));
+      addFinding(
+        'critical',
+        `MCP server "${name}" passes shell metacharacters in args`,
+        `An argument to the MCP server contains shell metacharacters: ${JSON.stringify(a)}. If a shell wrapper is involved, this is exploitable.`,
+        'shell-meta',
+        'Remove shell metacharacters; pass discrete arguments only.',
+      );
       break;
     }
   }
@@ -126,18 +132,13 @@ function findingsForServer(
   }
   const isInterpreter = INTERPRETER_BINS.has(cmdBase);
   if (out.length === 0 && !isTrustedServer(packageRef, trusted) && !isInterpreter) {
-    const sev: Severity = 'medium';
-    out.push(buildFinding({
-      ruleId: 'PS-003',
-      detectorId: DETECTOR_ID,
-      severity: sev,
-      title: `MCP server "${name}" is not in the trusted-server allowlist`,
-      description: `Package or binary "${packageRef}" does not match any prefix in the trusted list (${trusted.join(', ')}). Review the server's source before trusting it; MCP STDIO grants subprocess execution.`,
-      filePath: file, line: baseLine,
-      evidence: EVIDENCE.ox(),
-      remediation: { summary: 'Add the server to .promptshield.yaml mcp.trusted_servers if you have audited it.', autoFixAvailable: false },
-      fingerprintParts: [name, 'untrusted'],
-    }));
+    addFinding(
+      'medium',
+      `MCP server "${name}" is not in the trusted-server allowlist`,
+      `Package or binary "${packageRef}" does not match any prefix in the trusted list (${trusted.join(', ')}). Review the server's source before trusting it; MCP STDIO grants subprocess execution.`,
+      'untrusted',
+      'Add the server to .promptshield.yaml mcp.trusted_servers if you have audited it.',
+    );
   }
 
   return out;

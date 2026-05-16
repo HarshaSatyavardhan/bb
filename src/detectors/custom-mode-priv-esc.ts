@@ -1,4 +1,4 @@
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Detector, DetectorContext, Finding, Severity } from '../types/index.js';
 import { parseFrontmatter } from '../utils/yaml-frontmatter.js';
@@ -6,7 +6,6 @@ import { findLineForString, snippetAround } from '../utils/fs.js';
 import { loadYaml } from '../utils/config-loader.js';
 import { buildFinding } from '../utils/finding-builder.js';
 import { EVIDENCE } from '../utils/evidence.js';
-import { readFile } from 'node:fs/promises';
 
 const DETECTOR_ID = 'custom-mode-privilege-escalation';
 const PERMISSIVE_REGEXES = new Set(['', '.*', '.+', '^.*$', '^.+$', '.*?']);
@@ -50,6 +49,29 @@ function describeBreadth(e: ModeEval): string {
   return 'read';
 }
 
+function isRedTeamPurpose(value: unknown): boolean {
+  const purpose = String(value ?? '').toLowerCase();
+  return purpose === 'red-team' || purpose === 'pentest';
+}
+
+function fileRegexFrom(meta: Record<string, unknown>): string | undefined {
+  const fileRegex = meta.fileRegex;
+  if (typeof fileRegex === 'string') return fileRegex;
+  const snakeRegex = meta.file_regex;
+  return typeof snakeRegex === 'string' ? snakeRegex : undefined;
+}
+
+function evaluateBroadAccess(
+  groups: unknown[],
+  fileRegex: string | undefined,
+  hasRulesDir: boolean,
+): { severity: Severity; breadth: string } | null {
+  const evalRes = evalGroups(groups);
+  evalRes.fileRegex = fileRegex;
+  const severity = severityFor(evalRes, hasRulesDir);
+  return severity ? { severity, breadth: describeBreadth(evalRes) } : null;
+}
+
 async function dirExists(p: string): Promise<boolean> {
   try { return (await stat(p)).isDirectory(); } catch { return false; }
 }
@@ -63,26 +85,25 @@ async function scanBobModes(file: string): Promise<Finding[]> {
   const bobDir = path.dirname(file);
   for (const m of modes) {
     if (!m || typeof m !== 'object') continue;
-    const slug = typeof m.slug === 'string' ? m.slug : undefined;
-    const name = String(m.name ?? slug ?? 'unnamed');
-    const purpose = String(m.purpose ?? '').toLowerCase();
-    if (purpose === 'red-team' || purpose === 'pentest') continue;
-
-    const evalRes = evalGroups(m.groups ?? []);
-    evalRes.fileRegex = typeof m.fileRegex === 'string' ? m.fileRegex : undefined;
+    const mode = m as Record<string, unknown>;
+    const slug = typeof mode.slug === 'string' ? mode.slug : undefined;
+    const name = String(mode.name ?? slug ?? 'unnamed');
+    if (isRedTeamPurpose(mode.purpose)) continue;
 
     const hasRulesDir = slug ? await dirExists(path.join(bobDir, `rules-${slug}`)) : false;
-    const sev = severityFor(evalRes, hasRulesDir);
-    if (!sev) continue;
-
-    const breadth = describeBreadth(evalRes);
+    const access = evaluateBroadAccess(
+      Array.isArray(mode.groups) ? mode.groups : [],
+      typeof mode.fileRegex === 'string' ? mode.fileRegex : undefined,
+      hasRulesDir,
+    );
+    if (!access) continue;
     const line = findLineForString(text, slug ? `slug: ${slug}` : `name: ${name}`);
     out.push(buildFinding({
       ruleId: 'PS-004',
       detectorId: DETECTOR_ID,
-      severity: sev,
-      title: `Custom mode "${name}" grants ${breadth} permission with no behavioural guardrail`,
-      description: `The Bob custom mode "${name}" exposes ${breadth} capabilities with no \`.bob/rules-${slug ?? '<slug>'}/\` guardrail directory. Per arXiv 2601.17548 and Snyk ToxicSkills, this is the AI-agent equivalent of a Linux capability over-grant.`,
+      severity: access.severity,
+      title: `Custom mode "${name}" grants ${access.breadth} permission with no behavioural guardrail`,
+      description: `The Bob custom mode "${name}" exposes ${access.breadth} capabilities with no \`.bob/rules-${slug ?? '<slug>'}/\` guardrail directory. Per arXiv 2601.17548 and Snyk ToxicSkills, this is the AI-agent equivalent of a Linux capability over-grant.`,
       filePath: file, line, snippet: snippetAround(text, line),
       evidence: EVIDENCE.customMode(),
       remediation: {
@@ -101,26 +122,20 @@ async function scanClaudeSkill(file: string): Promise<Finding[]> {
   try { content = await readFile(file, 'utf8'); } catch { return out; }
   const fm = parseFrontmatter<any>(content);
   if (!fm.data) return out;
-  const purpose = String(fm.data.purpose ?? '').toLowerCase();
-  if (purpose === 'red-team' || purpose === 'pentest') return out;
+  if (isRedTeamPurpose(fm.data.purpose)) return out;
 
   const tools = Array.isArray(fm.data['allowed-tools']) ? fm.data['allowed-tools'] : [];
   if (tools.length === 0) return out;
-  const evalRes = evalGroups(tools);
-  evalRes.fileRegex = typeof fm.data.fileRegex === 'string' ? fm.data.fileRegex
-    : typeof fm.data.file_regex === 'string' ? fm.data.file_regex : undefined;
-
-  const sev = severityFor(evalRes, false);
-  if (!sev) return out;
+  const access = evaluateBroadAccess(tools, fileRegexFrom(fm.data), false);
+  if (!access) return out;
 
   const name = String(fm.data.name ?? path.basename(path.dirname(file)));
-  const breadth = describeBreadth(evalRes);
   out.push(buildFinding({
     ruleId: 'PS-004',
     detectorId: DETECTOR_ID,
-    severity: sev,
-    title: `Skill "${name}" grants ${breadth} permission with no behavioural guardrail`,
-    description: `The Claude skill "${name}" exposes ${breadth} capabilities without a narrow fileRegex.`,
+    severity: access.severity,
+    title: `Skill "${name}" grants ${access.breadth} permission with no behavioural guardrail`,
+    description: `The Claude skill "${name}" exposes ${access.breadth} capabilities without a narrow fileRegex.`,
     filePath: file, line: 1, snippet: snippetAround(content, 1, 5),
     evidence: EVIDENCE.customMode(),
     remediation: {

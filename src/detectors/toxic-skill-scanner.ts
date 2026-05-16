@@ -21,6 +21,23 @@ interface SignatureMatch {
   matchedText: string;
 }
 
+async function readUtf8IfExists(file: string): Promise<string | null> {
+  try {
+    return await readFile(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function addSignatureFindings(
+  out: Finding[],
+  content: string,
+  signatures: Signature[],
+  build: (match: SignatureMatch) => Finding,
+): void {
+  for (const match of matchSignatures(content, signatures)) out.push(build(match));
+}
+
 function matchSignatures(content: string, signatures: Signature[]): SignatureMatch[] {
   const results: SignatureMatch[] = [];
   const lines = content.split(/\r?\n/);
@@ -102,16 +119,14 @@ const detector: Detector = {
     ];
 
     for (const file of proseFiles) {
-      let content: string;
-      try {
-        content = await readFile(file, 'utf8');
-      } catch { continue; }
+      const content = await readUtf8IfExists(file);
+      if (!content) continue;
       const fm = parseFrontmatter(content);
 
       // Pattern matches
-      for (const m of matchSignatures(content, ctx.signatures.signatures)) {
+      addSignatureFindings(findings, content, ctx.signatures.signatures, (m) => {
         const severity: Severity = m.sig.severity ?? 'high';
-        findings.push(buildFinding({
+        return buildFinding({
           ruleId: 'PS-002',
           detectorId: DETECTOR_ID,
           severity,
@@ -126,8 +141,8 @@ const detector: Detector = {
             autoFixAvailable: false,
           },
           fingerprintParts: [m.sig.id],
-        }));
-      }
+        });
+      });
 
       // Base64 in frontmatter
       const b64 = checkBase64Frontmatter(content, fm.endLine);
@@ -166,14 +181,12 @@ const detector: Detector = {
     // Also scan customInstructions blobs in Bob custom_modes.yaml — these are
     // free-text agent prompts and a known prompt-injection target.
     for (const modeFile of ctx.discovery.bob.modeFiles) {
-      let content: string;
-      try {
-        content = await readFile(modeFile, 'utf8');
-      } catch { continue; }
+      const content = await readUtf8IfExists(modeFile);
+      if (!content) continue;
       // Scan the entire YAML file for malicious patterns; customInstructions
       // and roleDefinition are inside the doc, but textual scanning works.
-      for (const m of matchSignatures(content, ctx.signatures.signatures)) {
-        findings.push(buildFinding({
+      addSignatureFindings(findings, content, ctx.signatures.signatures, (m) =>
+        buildFinding({
           ruleId: 'PS-002',
           detectorId: DETECTOR_ID,
           severity: m.sig.severity,
@@ -185,8 +198,8 @@ const detector: Detector = {
           evidence: EVIDENCE.snyk(),
           remediation: { summary: 'Review the customInstructions/roleDefinition block for prompt-injection content. Remove untrusted text.', autoFixAvailable: false },
           fingerprintParts: ['custom-mode', m.sig.id],
-        }));
-      }
+        }),
+      );
     }
 
     return findings;

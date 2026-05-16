@@ -27,17 +27,22 @@ const SHELL_TOKEN_RE = new RegExp(
   `^(\\s*)"(?:Bash\\()?(${DANGEROUS_SHELL_TOKENS.join('|')})\\)?"\\s*(,?)\\s*$`,
 );
 
-async function fixChainedCommandBypass(finding: Finding): Promise<FixOperation | null> {
+async function withFindingLine<T>(
+  finding: Finding,
+  run: (ctx: { file: string; lines: string[]; line: string; lineIndex: number }) => T | null,
+): Promise<T | null> {
   const file = finding.location.path;
-  const content = await readFile(file, 'utf8');
-  const lines = content.split(/\r?\n/);
-  const li = finding.location.startLine - 1;
-  if (li < 0 || li >= lines.length) return null;
-  const line = lines[li];
+  const lines = (await readFile(file, 'utf8')).split(/\r?\n/);
+  const lineIndex = finding.location.startLine - 1;
+  if (lineIndex < 0 || lineIndex >= lines.length) return null;
+  return run({ file, lines, line: lines[lineIndex], lineIndex });
+}
 
-  // JSON-array entry: "echo", or "Bash(echo)"  (Bob's alwaysAllow + Claude's permissions.allow + Cursor's autoRun.allow)
-  const jsonMatch = line.match(SHELL_TOKEN_RE);
-  if (jsonMatch) {
+async function fixChainedCommandBypass(finding: Finding): Promise<FixOperation | null> {
+  return withFindingLine(finding, ({ file, line }) => {
+    // JSON-array entry: "echo", or "Bash(echo)"  (Bob alwaysAllow, Claude permissions.allow, Cursor autoRun.allow)
+    const jsonMatch = line.match(SHELL_TOKEN_RE);
+    if (!jsonMatch) return null;
     const cmd = jsonMatch[2];
     return {
       ruleId: 'PS-001',
@@ -47,28 +52,23 @@ async function fixChainedCommandBypass(finding: Finding): Promise<FixOperation |
       before: `${line}\n`,
       after: '',
     };
-  }
-  return null;
+  });
 }
 
 async function fixCommentAndControlWorkflow(finding: Finding): Promise<FixOperation | null> {
-  const file = finding.location.path;
-  const content = await readFile(file, 'utf8');
-  const lines = content.split(/\r?\n/);
-  const li = finding.location.startLine - 1;
-  if (li < 0 || li >= lines.length) return null;
-
-  // Insert a comment near the offending step suggesting --disallowed-tools
-  const indent = (lines[li].match(/^(\s*)/) ?? ['', ''])[1];
-  const note = `${indent}# PromptShield PS-005: add '--disallowed-tools "Bash,Write,Edit"' and consider 'pull_request' instead of 'pull_request_target'`;
-  return {
-    ruleId: 'PS-005',
-    file,
-    line: finding.location.startLine,
-    description: 'Insert hardening comment for Comment-and-Control workflow',
-    before: `${lines[li]}\n`,
-    after: `${note}\n${lines[li]}\n`,
-  };
+  return withFindingLine(finding, ({ file, line }) => {
+    // Insert a comment near the offending step suggesting --disallowed-tools.
+    const indent = (line.match(/^(\s*)/) ?? ['', ''])[1];
+    const note = `${indent}# PromptShield PS-005: add '--disallowed-tools "Bash,Write,Edit"' and consider 'pull_request' instead of 'pull_request_target'`;
+    return {
+      ruleId: 'PS-005',
+      file,
+      line: finding.location.startLine,
+      description: 'Insert hardening comment for Comment-and-Control workflow',
+      before: `${line}\n`,
+      after: `${note}\n${line}\n`,
+    };
+  });
 }
 
 function buildPatchPreview(rootDir: string, ops: FixOperation[]): string {

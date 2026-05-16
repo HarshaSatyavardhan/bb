@@ -33,29 +33,23 @@ function localAndDeep(...localPatterns: string[]): string[] {
 export async function discover(opts: DiscoverOptions): Promise<DiscoveryResult> {
   const root = path.resolve(opts.rootDir);
   const home = os.homedir();
+  const deepGlob = (...patterns: string[]) => globMany(root, localAndDeep(...patterns));
 
   // Real Bob (verified vs github.com/IBM/bob-demo).
   // No `.bob/settings.yaml`; behaviour comes from custom_modes.yaml + rules-<slug>/.
-  const bobSkills = await globMany(root, localAndDeep('.bob/skills/*/SKILL.md'));
-  const bobRules = await globMany(root, localAndDeep('.bob/rules-*/*.md'));
-  const bobModes = await globMany(root, localAndDeep(
-    '.bob/custom_modes.yaml', '.bob/custom_modes.yml',
-  ));
-  const bobMcp = await globMany(root, localAndDeep(
-    '.bob/mcp.json',
-    // legacy/fictional layout retained so misnamed configs still get scanned.
-    '.bob/mcp/*.json',
-  ));
+  const bobSkills = await deepGlob('.bob/skills/*/SKILL.md');
+  const bobRules = await deepGlob('.bob/rules-*/*.md');
+  const bobModes = await deepGlob('.bob/custom_modes.yaml', '.bob/custom_modes.yml');
+  // legacy/fictional layout retained so misnamed configs still get scanned.
+  const bobMcp = await deepGlob('.bob/mcp.json', '.bob/mcp/*.json');
 
-  const claudeSettings = await globMany(root, localAndDeep(
-    '.claude/settings.json', '.claude/settings.local.json',
-  ));
-  const claudeSkills = await globMany(root, localAndDeep('.claude/skills/*/SKILL.md'));
+  const claudeSettings = await deepGlob('.claude/settings.json', '.claude/settings.local.json');
+  const claudeSkills = await deepGlob('.claude/skills/*/SKILL.md');
   const claudeMcp = await globMany(root, ['.mcp.json', '.claude/mcp.json', '**/.claude/mcp.json']);
 
-  const cursorSettings = await globMany(root, localAndDeep('.cursor/settings.json'));
+  const cursorSettings = await deepGlob('.cursor/settings.json');
   const cursorRules = await globMany(root, ['.cursorrules', ...localAndDeep('.cursor/rules/*.md')]);
-  const cursorMcp = await globMany(root, localAndDeep('.cursor/mcp.json'));
+  const cursorMcp = await deepGlob('.cursor/mcp.json');
 
   const workflows = await globMany(root, [
     '.github/workflows/*.yml',
@@ -64,12 +58,12 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoveryResult> 
 
   if (opts.includeHome) {
     const candidates: Array<[string, string[]]> = [
-      [path.join(home, '.bob', 'custom_modes.yaml'), bobModes],
-      [path.join(home, '.bob', 'mcp.json'), bobMcp],
-      [path.join(home, '.claude', 'settings.json'), claudeSettings],
-      [path.join(home, '.claude', 'mcp.json'), claudeMcp],
-      [path.join(home, '.cursor', 'mcp.json'), cursorMcp],
-    ];
+      ['.bob/custom_modes.yaml', bobModes],
+      ['.bob/mcp.json', bobMcp],
+      ['.claude/settings.json', claudeSettings],
+      ['.claude/mcp.json', claudeMcp],
+      ['.cursor/mcp.json', cursorMcp],
+    ].map(([rel, list]) => [path.join(home, rel), list]);
     for (const [p, list] of candidates) {
       if (await fileExists(p)) list.push(p);
     }

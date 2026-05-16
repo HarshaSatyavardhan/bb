@@ -1,8 +1,6 @@
-import { readdir } from 'node:fs/promises';
-import path from 'node:path';
 import type { Detector, DetectorContext, Finding } from '../types/index.js';
 import { tokenizeAllowEntry, containsShellMeta } from '../utils/shell-tokenizer.js';
-import { findLineForListItem, findLineForString, snippetAround } from '../utils/fs.js';
+import { findLineForString, snippetAround } from '../utils/fs.js';
 import { loadYaml, loadJsonc } from '../utils/config-loader.js';
 import { buildFinding } from '../utils/finding-builder.js';
 import { EVIDENCE } from '../utils/evidence.js';
@@ -32,7 +30,6 @@ const DETECTOR_ID = 'chained-command-bypass';
 
 interface AllowEntryFinding {
   bareCommand: string;
-  raw: string;
 }
 
 function inspectAllowEntry(entry: unknown): AllowEntryFinding | null {
@@ -45,7 +42,7 @@ function inspectAllowEntry(entry: unknown): AllowEntryFinding | null {
   const head = tokens[0];
   // Bare or near-bare shell utility -> exploitable via chaining.
   if (tokens.length <= 2 && SHELL_UTILITIES.has(head)) {
-    return { bareCommand: head, raw: entry };
+    return { bareCommand: head };
   }
   return null;
 }
@@ -54,7 +51,6 @@ function findingForAllowEntry(args: {
   source: 'bob-alwaysAllow' | 'claude' | 'cursor';
   serverName?: string;
   command: string;
-  raw: string;
   file: string;
   line: number;
   text: string;
@@ -80,6 +76,30 @@ function findingForAllowEntry(args: {
     },
     fingerprintParts: [args.source, args.serverName ?? '', args.command],
   });
+}
+
+function findingsForAllowList(args: {
+  source: 'bob-alwaysAllow' | 'claude' | 'cursor';
+  serverName?: string;
+  file: string;
+  text: string;
+  allow: unknown[];
+  lineNeedle: (entry: unknown) => string;
+}): Finding[] {
+  const out: Finding[] = [];
+  for (const entry of args.allow) {
+    const hit = inspectAllowEntry(entry);
+    if (!hit) continue;
+    out.push(findingForAllowEntry({
+      source: args.source,
+      serverName: args.serverName,
+      command: hit.bareCommand,
+      file: args.file,
+      line: findLineForString(args.text, args.lineNeedle(entry)),
+      text: args.text,
+    }));
+  }
+  return out;
 }
 
 function findingForProcessSubstitution(args: {
@@ -114,56 +134,32 @@ async function scanBobMcpAlwaysAllow(file: string): Promise<Finding[]> {
     const server = raw as { alwaysAllow?: unknown };
     const allow = server?.alwaysAllow;
     if (!Array.isArray(allow)) continue;
-    for (const entry of allow) {
-      const hit = inspectAllowEntry(entry);
-      if (!hit) continue;
-      const line = findLineForString(text, JSON.stringify(entry));
-      out.push(findingForAllowEntry({
-        source: 'bob-alwaysAllow',
-        serverName,
-        command: hit.bareCommand,
-        raw: hit.raw,
-        file,
-        line,
-        text,
-      }));
-    }
+    out.push(...findingsForAllowList({
+      source: 'bob-alwaysAllow',
+      serverName,
+      file,
+      text,
+      allow,
+      lineNeedle: (entry) => JSON.stringify(entry),
+    }));
   }
   return out;
 }
 
 async function scanClaudeSettings(file: string): Promise<Finding[]> {
-  const out: Finding[] = [];
   const { text, doc } = await loadJsonc<any>(file);
   const allow = doc?.permissions?.allow;
-  if (!Array.isArray(allow)) return out;
-  for (const entry of allow) {
-    const hit = inspectAllowEntry(entry);
-    if (!hit) continue;
-    const line = findLineForString(text, entry as string);
-    out.push(findingForAllowEntry({
-      source: 'claude', command: hit.bareCommand, raw: hit.raw,
-      file, line, text,
-    }));
-  }
-  return out;
+  return Array.isArray(allow)
+    ? findingsForAllowList({ source: 'claude', file, text, allow, lineNeedle: (entry) => String(entry) })
+    : [];
 }
 
 async function scanCursorSettings(file: string): Promise<Finding[]> {
-  const out: Finding[] = [];
   const { text, doc } = await loadJsonc<any>(file);
   const allow = doc?.autoRun?.allow ?? doc?.auto_run?.allow;
-  if (!Array.isArray(allow)) return out;
-  for (const entry of allow) {
-    const hit = inspectAllowEntry(entry);
-    if (!hit) continue;
-    const line = findLineForString(text, entry as string);
-    out.push(findingForAllowEntry({
-      source: 'cursor', command: hit.bareCommand, raw: hit.raw,
-      file, line, text,
-    }));
-  }
-  return out;
+  return Array.isArray(allow)
+    ? findingsForAllowList({ source: 'cursor', file, text, allow, lineNeedle: (entry) => String(entry) })
+    : [];
 }
 
 /**
