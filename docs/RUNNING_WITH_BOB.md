@@ -126,27 +126,26 @@ Now when you click the mode selector in Bob, you'll see **🔒 Security Auditor*
 
 ## Step 4 — Open a project for Bob to scan
 
-You need *something* with AI configs to make the demo interesting. The easiest is to point Bob at the bundled **`test-fixtures/bob-vulnerable/`** directory inside this repo, which intentionally contains all 5 exploit classes.
+You need *something* with AI configs to make the demo interesting. Generate disposable validation workspaces that intentionally include all 5 exploit classes.
 
 ```bash
-# From the promptshield repo root
-cp -r test-fixtures/bob-vulnerable ~/Desktop/demo-vulnerable
+npm run generate:validation-workspaces
 ```
 
-Then in Bob: **File → Open Folder → `~/Desktop/demo-vulnerable`**.
+Then in Bob: **File → Open Folder → `/tmp/promptshield-validation/all-vulnerable`**.
 
 You'll see this layout:
 ```
-demo-vulnerable/
+all-vulnerable/
 ├── .bob/
-│   ├── custom_modes.yaml      # 2 vulnerable modes (PS-004 targets)
-│   ├── mcp.json                # 5 servers — bash -c, interp, alwaysAllow shell, untrusted (PS-001 + PS-003)
+│   ├── custom_modes.yaml      # vulnerable mode (PS-004 target)
+│   ├── mcp.json               # alwaysAllow shell + bash -c server (PS-001 + PS-003)
 │   └── skills/
-│       └── toxic-helper/
-│           └── SKILL.md        # malicious patterns (PS-002)
+│       └── toxic/
+│           └── SKILL.md       # malicious signature phrase (PS-002)
 └── .github/
     └── workflows/
-        └── ai-review.yml       # Comment-and-Control vulnerable (PS-005)
+        └── ai-review.yml      # Comment-and-Control vulnerable (PS-005)
 ```
 
 ---
@@ -172,25 +171,18 @@ Bob will:
 ### Sample expected output
 
 ```text
-I scanned the project with PromptShield. Here's the summary (5 detectors run, 17 findings):
+I scanned the project with PromptShield. Here's the summary (5 detectors run):
 
-CRITICAL (9):
- 1. PS-001  .bob/mcp.json:14   Auto-approved shell utility "echo" enables chained-command bypass
+CRITICAL findings:
+ 1. PS-001  .bob/mcp.json:...   Auto-approved shell utility "echo" enables chained-command bypass
                                 → PromptArmor 2026-01-07
- 2. PS-001  .bob/mcp.json:15   Auto-approved shell utility "cat" enables chained-command bypass
- 3. PS-001  .bob/mcp.json:16   Auto-approved shell utility "tee" enables chained-command bypass
- 4. PS-003  .bob/mcp.json:3    MCP server "vulnerable-server" invokes a shell with -c
+ 2. PS-003  .bob/mcp.json:...   MCP server "vulnerable" invokes a shell with -c
                                 → OX Security 2026-04-16  (CVE-2026-30615)
- 5. PS-003  .bob/mcp.json:8    MCP server "interp-server" uses variable interpolation in command field
- 6. PS-003  .bob/mcp.json:3    MCP server "vulnerable-server" passes shell metacharacters in args
- 7. PS-004  .bob/custom_modes.yaml:2   "DevHelper" grants command/shell with no .bob/rules-dev-helper/
+ 3. PS-004  .bob/custom_modes.yaml:... "BroadMode" grants command/shell with no .bob/rules-broad/
                                 → arXiv 2601.17548 + Snyk ToxicSkills
- 8. PS-002  .bob/skills/toxic-helper/SKILL.md:11   curl|sh signature
- 9. PS-005  .github/workflows/ai-review.yml:11   "claude" CLI takes PR body via pull_request_target
+ 4. PS-002  .bob/skills/toxic/SKILL.md:...  signature match
+ 5. PS-005  .github/workflows/ai-review.yml:... "claude" CLI takes PR comment body via pull_request_target
                                 → Aonan Guan + JHU 2026-04-15
-
-HIGH (5):     PS-002 prompt-injection patterns; PS-004 BroadEditor mode
-MEDIUM (3):   untrusted MCP servers, streamable-http remote origin
 
 Want me to:
  a) Show full remediation for any finding?  (call explain_finding)
@@ -213,10 +205,10 @@ Want me to:
 npx promptshield --root /path/to/project
 
 # Pretty terminal output, exit 0 if clean / 1 if any high+ finding:
-node dist/cli.js scan --root test-fixtures/bob-vulnerable
+node dist/cli.js scan --root /tmp/promptshield-validation/all-vulnerable
 
 # JSON for pipelines:
-node dist/cli.js scan --root test-fixtures/bob-vulnerable --json --quiet
+node dist/cli.js scan --root /tmp/promptshield-validation/all-vulnerable --json --quiet
 
 # SARIF for GitHub Code Scanning:
 node dist/cli.js scan --sarif results.sarif
@@ -225,7 +217,7 @@ node dist/cli.js scan --sarif results.sarif
 node dist/cli.js scan --html report.html && open report.html
 
 # Auto-fix dry run:
-node dist/cli.js fix --root test-fixtures/bob-vulnerable
+node dist/cli.js fix --root /tmp/promptshield-validation/all-vulnerable
 cat .promptshield-fixes.patch
 
 # Apply (only in a copy you don't mind mutating!):
@@ -273,7 +265,7 @@ Open in Bob, ask it to scan → expect **0 findings**.
 | Bob doesn't show `promptshield` under MCP servers | Wrong path in `~/.bob/mcp.json` | Use the absolute path to `dist/cli.js`, not `~/...` |
 | `Cannot find module …/dist/cli.js` | You didn't run `npm run build` | `cd promptshield && npm run build` |
 | `npx promptshield` fails | Not yet published to npm | Use `node /absolute/path/to/dist/cli.js` instead |
-| Scan returns 0 findings unexpectedly | Pointed at a clean directory | Try `--root test-fixtures/bob-vulnerable` |
+| Scan returns 0 findings unexpectedly | Pointed at a clean directory | Try `--root /tmp/promptshield-validation/all-vulnerable` |
 | Bob asks for approval on every tool call | Not in `alwaysAllow` | Add `scan_project`, `list_detectors`, `explain_finding` to the server's `alwaysAllow` list |
 | `--apply` modified real files | You ran in your real project | Always `--apply` against a copy first |
 

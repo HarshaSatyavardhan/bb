@@ -1,7 +1,7 @@
 # PromptShield self-scan config (dogfood)
 ignore:
-  - path: ^test-fixtures/
-    reason: Intentionally vulnerable test fixtures.
+  - path: ^\\.promptshield-validation/
+    reason: Generated intentionally vulnerable validation workspaces.
 mcp:
   trusted_servers:
     - "@modelcontextprotocol/"

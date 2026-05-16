@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Finding } from '../types/index.js';
+import { DANGEROUS_SHELL_UTILITY_NAMES } from '../utils/shell-utilities.js';
 
 export interface FixOperation {
   ruleId: string;
@@ -18,13 +19,8 @@ export interface FixResult {
   unfixable: Finding[];
 }
 
-const DANGEROUS_SHELL_TOKENS = [
-  'echo', 'cat', 'printf', 'tee', 'true', 'false', 'pwd',
-  'sh', 'bash', 'zsh', 'env', 'eval', 'exec',
-];
-
 const SHELL_TOKEN_RE = new RegExp(
-  `^(\\s*)"(?:Bash\\()?(${DANGEROUS_SHELL_TOKENS.join('|')})\\)?"\\s*(,?)\\s*$`,
+  `^(\\s*)"(?:Bash\\()?(${DANGEROUS_SHELL_UTILITY_NAMES.join('|')})\\)?"\\s*(,?)\\s*$`,
 );
 
 async function withFindingLine<T>(

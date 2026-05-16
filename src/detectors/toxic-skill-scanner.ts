@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import type {
   Detector,
   DetectorContext,
@@ -10,6 +9,7 @@ import type {
 } from '../types/index.js';
 import { parseFrontmatter } from '../utils/yaml-frontmatter.js';
 import { snippetAround } from '../utils/fs.js';
+import { readUtf8Optional } from '../utils/config-loader.js';
 import { buildFinding } from '../utils/finding-builder.js';
 import { EVIDENCE } from '../utils/evidence.js';
 
@@ -19,14 +19,6 @@ interface SignatureMatch {
   sig: Signature;
   line: number;
   matchedText: string;
-}
-
-async function readUtf8IfExists(file: string): Promise<string | null> {
-  try {
-    return await readFile(file, 'utf8');
-  } catch {
-    return null;
-  }
 }
 
 function addSignatureFindings(
@@ -119,7 +111,7 @@ const detector: Detector = {
     ];
 
     for (const file of proseFiles) {
-      const content = await readUtf8IfExists(file);
+      const content = await readUtf8Optional(file);
       if (!content) continue;
       const fm = parseFrontmatter(content);
 
@@ -181,7 +173,7 @@ const detector: Detector = {
     // Also scan customInstructions blobs in Bob custom_modes.yaml — these are
     // free-text agent prompts and a known prompt-injection target.
     for (const modeFile of ctx.discovery.bob.modeFiles) {
-      const content = await readUtf8IfExists(modeFile);
+      const content = await readUtf8Optional(modeFile);
       if (!content) continue;
       // Scan the entire YAML file for malicious patterns; customInstructions
       // and roleDefinition are inside the doc, but textual scanning works.

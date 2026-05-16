@@ -4,6 +4,7 @@ import { findLineForString, snippetAround } from '../utils/fs.js';
 import { loadYaml, loadJsonc } from '../utils/config-loader.js';
 import { buildFinding } from '../utils/finding-builder.js';
 import { EVIDENCE } from '../utils/evidence.js';
+import { DANGEROUS_SHELL_UTILITY_SET } from '../utils/shell-utilities.js';
 
 /**
  * Shell utilities the PromptArmor exploit (2026-01-07) leveraged.
@@ -12,12 +13,6 @@ import { EVIDENCE } from '../utils/evidence.js';
  * an attacker can chain shell metacharacters or process substitution
  * to execute arbitrary payloads without re-approval.
  */
-const SHELL_UTILITIES = new Set([
-  'echo', 'cat', 'printf', 'tee', 'true', 'false', 'pwd',
-  'sh', 'bash', 'zsh', 'dash', 'ksh',
-  'env', 'eval', 'exec',
-]);
-
 /**
  * Process substitution `>(...)` is the specific bypass PromptArmor
  * disclosed: Bob's filter caught `$(...)`, `<(...)`, and backticks but
@@ -41,7 +36,7 @@ function inspectAllowEntry(entry: unknown): AllowEntryFinding | null {
   if (tokens.length === 0) return null;
   const head = tokens[0];
   // Bare or near-bare shell utility -> exploitable via chaining.
-  if (tokens.length <= 2 && SHELL_UTILITIES.has(head)) {
+  if (tokens.length <= 2 && DANGEROUS_SHELL_UTILITY_SET.has(head)) {
     return { bareCommand: head };
   }
   return null;

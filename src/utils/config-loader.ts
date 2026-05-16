@@ -7,7 +7,7 @@ export interface LoadedFile<T> {
   doc: T | null;
 }
 
-async function safeRead(file: string): Promise<string | null> {
+export async function readUtf8Optional(file: string): Promise<string | null> {
   try {
     return await readFile(file, 'utf8');
   } catch {
@@ -16,7 +16,7 @@ async function safeRead(file: string): Promise<string | null> {
 }
 
 export async function loadYaml<T = unknown>(file: string): Promise<LoadedFile<T>> {
-  const text = await safeRead(file);
+  const text = await readUtf8Optional(file);
   if (text === null) return { text: '', doc: null };
   try {
     return { text, doc: parseYaml(text) as T };
@@ -26,7 +26,7 @@ export async function loadYaml<T = unknown>(file: string): Promise<LoadedFile<T>
 }
 
 export async function loadJsonc<T = unknown>(file: string): Promise<LoadedFile<T>> {
-  const text = await safeRead(file);
+  const text = await readUtf8Optional(file);
   if (text === null) return { text: '', doc: null };
   try {
     return { text, doc: parseJsonc(text) as T };

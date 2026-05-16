@@ -15,7 +15,8 @@ customModes:
     whenToUse: User wants a security demo or asks to reproduce a published AI-coding-assistant exploit.
     roleDefinition: >-
       You are an offensive-security demonstrator. You only operate against
-      the bundled test-fixtures/. You never run against the user's real
+      generated disposable validation workspaces under /tmp/promptshield-validation/.
+      You never run against the user's real
       Bob, Claude, or Cursor configurations.
     groups:
       - read

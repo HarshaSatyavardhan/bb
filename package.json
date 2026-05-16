@@ -36,6 +36,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsx src/cli/index.ts",
+    "generate:validation-workspaces": "node scripts/generate-validation-workspaces.mjs",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build && npm run lint"

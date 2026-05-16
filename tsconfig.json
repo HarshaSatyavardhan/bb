@@ -19,5 +19,5 @@
     "allowSyntheticDefaultImports": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test", "test-fixtures"]
+  "exclude": ["node_modules", "dist", "test"]
 }

@@ -1,9 +1,9 @@
-import { readFile, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Detector, DetectorContext, Finding, Severity } from '../types/index.js';
 import { parseFrontmatter } from '../utils/yaml-frontmatter.js';
 import { findLineForString, snippetAround } from '../utils/fs.js';
-import { loadYaml } from '../utils/config-loader.js';
+import { loadYaml, readUtf8Optional } from '../utils/config-loader.js';
 import { buildFinding } from '../utils/finding-builder.js';
 import { EVIDENCE } from '../utils/evidence.js';
 
@@ -93,7 +93,7 @@ async function scanBobModes(file: string): Promise<Finding[]> {
     const hasRulesDir = slug ? await dirExists(path.join(bobDir, `rules-${slug}`)) : false;
     const access = evaluateBroadAccess(
       Array.isArray(mode.groups) ? mode.groups : [],
-      typeof mode.fileRegex === 'string' ? mode.fileRegex : undefined,
+      fileRegexFrom(mode),
       hasRulesDir,
     );
     if (!access) continue;
@@ -118,8 +118,8 @@ async function scanBobModes(file: string): Promise<Finding[]> {
 
 async function scanClaudeSkill(file: string): Promise<Finding[]> {
   const out: Finding[] = [];
-  let content: string;
-  try { content = await readFile(file, 'utf8'); } catch { return out; }
+  const content = await readUtf8Optional(file);
+  if (!content) return out;
   const fm = parseFrontmatter<any>(content);
   if (!fm.data) return out;
   if (isRedTeamPurpose(fm.data.purpose)) return out;

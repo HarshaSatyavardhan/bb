@@ -22,6 +22,20 @@ interface ScanCliOptions {
   quiet?: boolean;
 }
 
+async function writeOptionalReport(args: {
+  flag: string | boolean | undefined;
+  defaultPath: string;
+  root: string;
+  content: string;
+  quiet?: boolean;
+  label: string;
+}): Promise<void> {
+  if (!args.flag) return;
+  const out = typeof args.flag === 'string' ? args.flag : args.defaultPath;
+  await writeFile(path.resolve(args.root, out), args.content, 'utf8');
+  if (!args.quiet) process.stdout.write(`${args.label} written to ${out}\n`);
+}
+
 async function runScanCmd(opts: ScanCliOptions): Promise<void> {
   const root = path.resolve(opts.root ?? process.cwd());
   const result = await runScan({
@@ -38,16 +52,22 @@ async function runScanCmd(opts: ScanCliOptions): Promise<void> {
     if (!opts.quiet) process.stdout.write(renderTty(result, root));
   }
 
-  if (opts.sarif) {
-    const out = typeof opts.sarif === 'string' ? opts.sarif : 'promptshield.sarif';
-    await writeFile(path.resolve(root, out), renderSarif(result, root), 'utf8');
-    if (!opts.quiet) process.stdout.write(`\nSARIF written to ${out}\n`);
-  }
-  if (opts.html) {
-    const out = typeof opts.html === 'string' ? opts.html : 'promptshield-report.html';
-    await writeFile(path.resolve(root, out), renderHtml(result, root), 'utf8');
-    if (!opts.quiet) process.stdout.write(`HTML report written to ${out}\n`);
-  }
+  await writeOptionalReport({
+    flag: opts.sarif,
+    defaultPath: 'promptshield.sarif',
+    root,
+    content: renderSarif(result, root),
+    quiet: opts.quiet,
+    label: '\nSARIF',
+  });
+  await writeOptionalReport({
+    flag: opts.html,
+    defaultPath: 'promptshield-report.html',
+    root,
+    content: renderHtml(result, root),
+    quiet: opts.quiet,
+    label: 'HTML report',
+  });
 
   process.exit(opts.exitZero ? 0 : result.exitCode);
 }
@@ -78,7 +98,12 @@ async function runFixCmd(opts: FixCliOptions): Promise<void> {
     process.stdout.write(`  ${op.ruleId}  ${path.relative(root, op.file)}:${op.line}  ${op.description}\n`);
   }
 
-  if (opts.apply) {
+  const shouldApply = !!opts.apply && !opts.dryRun;
+  if (opts.apply && opts.dryRun) {
+    process.stdout.write('Both --apply and --dry-run passed; honoring --dry-run.\n');
+  }
+
+  if (shouldApply) {
     await applyFixes(plan.operations);
     process.stdout.write(`Applied ${plan.operations.length} fix(es). Re-run \`promptshield\` to verify.\n`);
   } else {
