@@ -1,5 +1,7 @@
 # PromptShield
 
+![PromptShield cover](ChatGPT%20Image%20May%2017%2C%202026%2C%2007_21_34%20PM.png)
+
 PromptShield is a security scanner for AI coding assistant configurations across IBM Bob, Claude Code, and Cursor.
 
 It audits MCP servers, skills, custom modes, and AI workflow files for known exploit classes, then returns structured findings for terminal, JSON, SARIF, HTML, or MCP-based assistant workflows.
