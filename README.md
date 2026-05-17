@@ -81,9 +81,6 @@ npx promptshield --root /path/to/repo --sarif results.sarif
 # HTML report
 npx promptshield --root /path/to/repo --html report.html
 
-# Markdown report
-npx promptshield --root /path/to/repo --markdown report.md
-
 # Auto-fix preview (dry-run)
 npx promptshield fix --root /path/to/repo
 ```
@@ -111,7 +108,6 @@ These are designed so Bob can use PromptShield MCP tools first, with CLI fallbac
 - JSON for automation and pipelines
 - SARIF for code scanning integrations
 - HTML for security review handoff
-- Markdown for shareable human-readable audits
 
 ## Development
 
