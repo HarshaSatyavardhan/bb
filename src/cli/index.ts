@@ -140,15 +140,7 @@ const program = new Command();
 program
   .name('promptshield')
   .description('Security scanner for AI coding assistant configurations (Bob, Claude Code, Cursor)')
-  .version(TOOL_VERSION)
-  .option('--mcp', 'run as an MCP server over STDIO')
-  .hook('preAction', async (thisCmd) => {
-    const opts = thisCmd.opts();
-    if (opts.mcp) {
-      await startMcp();
-      // never returns
-    }
-  });
+  .version(TOOL_VERSION);
 
 program
   .command('scan', { isDefault: true })
@@ -181,8 +173,19 @@ program
   .description('List all available detectors')
   .action(() => listDetectors());
 
-program.parseAsync(process.argv).catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error(err);
-  process.exit(1);
-});
+const cliArgs = process.argv.slice(2);
+const runAsMcp = cliArgs.length === 1 && cliArgs[0] === '--mcp';
+
+if (runAsMcp) {
+  startMcp().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('MCP server error:', err);
+    process.exit(1);
+  });
+} else {
+  program.parseAsync(process.argv).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    process.exit(1);
+  });
+}
