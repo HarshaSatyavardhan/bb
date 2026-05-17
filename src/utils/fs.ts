@@ -41,7 +41,7 @@ export function findLineForListItem(content: string, key: string, index: number)
       const indent = line.length - line.trimStart().length;
       if (indent <= keyIndent) {
         // Out of section
-        return i;
+        break;
       }
       if (trimmed.startsWith('- ') || trimmed === '-') {
         if (count === index) return i + 1;

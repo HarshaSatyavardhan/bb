@@ -9,6 +9,14 @@ const SEVERITY_RANK: Record<Severity, number> = {
   info: 0,
 };
 
+function isSeverity(value: unknown): value is Severity {
+  return value === 'critical'
+    || value === 'high'
+    || value === 'medium'
+    || value === 'low'
+    || value === 'info';
+}
+
 function matchesIgnore(finding: Finding, rootDir: string, ignore: PromptShieldConfig['ignore']): boolean {
   for (const rule of ignore) {
     const ruleMatches = !rule.ruleId || rule.ruleId === finding.ruleId;
@@ -46,7 +54,7 @@ export function aggregate(
 
     // Severity overrides
     const override = config.severityOverrides?.[f.ruleId];
-    const finding: Finding = override ? { ...f, severity: override } : f;
+    const finding: Finding = isSeverity(override) ? { ...f, severity: override } : f;
 
     // Ignores
     if (matchesIgnore(finding, rootDir, config.ignore)) continue;

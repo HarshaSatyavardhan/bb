@@ -17,7 +17,13 @@ function escape(s: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeHref(url: string): string {
+  const trimmed = url.trim();
+  return /^https?:\/\//i.test(trimmed) ? escape(trimmed) : '#';
 }
 
 function findingHtml(f: Finding, rootDir: string): string {
@@ -34,7 +40,7 @@ function findingHtml(f: Finding, rootDir: string): string {
       <p>${escape(f.description)}</p>
       <p><strong>Source:</strong> ${escape(f.evidence.primarySource)}</p>
       ${f.evidence.cveIds?.length ? `<p><strong>CVEs:</strong> ${f.evidence.cveIds.map(escape).join(', ')}</p>` : ''}
-      ${f.evidence.references.length ? `<p><strong>References:</strong><ul>${f.evidence.references.map((r) => `<li><a href="${escape(r)}">${escape(r)}</a></li>`).join('')}</ul></p>` : ''}
+      ${f.evidence.references.length ? `<p><strong>References:</strong><ul>${f.evidence.references.map((r) => `<li><a href="${safeHref(r)}">${escape(r)}</a></li>`).join('')}</ul></p>` : ''}
       <p><strong>Remediation:</strong> ${escape(f.remediation.summary)}</p>
       ${f.location.snippet ? `<pre><code>${escape(f.location.snippet)}</code></pre>` : ''}
     </div>

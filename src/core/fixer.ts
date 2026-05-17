@@ -123,6 +123,34 @@ function normalizeJsonArraySyntax(content: string): string {
     .replace(/,\s*,/g, ',');
 }
 
+function lineStartOffset(content: string, line: number): number {
+  if (line <= 1) return 0;
+  let currentLine = 1;
+  for (let i = 0; i < content.length; i++) {
+    if (content[i] === '\n') {
+      currentLine++;
+      if (currentLine === line) return i + 1;
+    }
+  }
+  return -1;
+}
+
+function replaceOperation(content: string, op: FixOperation): string {
+  const expectedOffset = lineStartOffset(content, op.line);
+  if (expectedOffset >= 0 && content.startsWith(op.before, expectedOffset)) {
+    return content.slice(0, expectedOffset) + op.after + content.slice(expectedOffset + op.before.length);
+  }
+
+  const first = content.indexOf(op.before);
+  if (first < 0) return content;
+
+  const second = content.indexOf(op.before, first + op.before.length);
+  // Ambiguous replacement target: keep file unchanged instead of risking corruption.
+  if (second >= 0) return content;
+
+  return content.slice(0, first) + op.after + content.slice(first + op.before.length);
+}
+
 export async function applyFixes(ops: FixOperation[]): Promise<void> {
   const byFile = new Map<string, FixOperation[]>();
   for (const op of ops) {
@@ -131,14 +159,20 @@ export async function applyFixes(ops: FixOperation[]): Promise<void> {
   }
   for (const [file, list] of byFile) {
     let content = await readFile(file, 'utf8');
-    // Replace longest first to avoid index issues
-    for (const op of list.sort((a, b) => b.before.length - a.before.length)) {
-      if (content.includes(op.before)) {
-        content = content.replace(op.before, op.after);
-      }
+    // Apply lower file lines first so earlier replacements do not shift later offsets.
+    for (const op of list.sort((a, b) => b.line - a.line || b.before.length - a.before.length)) {
+      content = replaceOperation(content, op);
     }
     if (file.endsWith('.json')) {
-      content = normalizeJsonArraySyntax(content);
+      const normalized = normalizeJsonArraySyntax(content);
+      if (normalized !== content) {
+        try {
+          JSON.parse(normalized);
+          content = normalized;
+        } catch {
+          // Keep original content if normalization would produce invalid JSON.
+        }
+      }
     }
     await writeFile(file, content, 'utf8');
   }

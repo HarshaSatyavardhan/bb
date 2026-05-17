@@ -181,19 +181,8 @@ program
   .description('List all available detectors')
   .action(() => listDetectors());
 
-const cliArgs = process.argv.slice(2);
-const runAsMcp = cliArgs.length === 1 && cliArgs[0] === '--mcp';
-
-if (runAsMcp) {
-  startMcp().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error('MCP server error:', err);
-    process.exit(1);
-  });
-} else {
-  program.parseAsync(process.argv).catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error(err);
-    process.exit(1);
-  });
-}
+program.parseAsync(process.argv).catch((err) => {
+  // eslint-disable-next-line no-console
+  console.error(err);
+  process.exit(1);
+});

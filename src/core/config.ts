@@ -20,20 +20,32 @@ export async function loadConfig(rootDir: string): Promise<PromptShieldConfig> {
   return DEFAULT_CONFIG;
 }
 
-function mergeConfig(user: any): PromptShieldConfig {
+function mergeConfig(user: unknown): PromptShieldConfig {
+  const userObj = typeof user === 'object' && user !== null ? (user as Record<string, unknown>) : {};
+  const severityOverrides =
+    typeof userObj.severityOverrides === 'object' && userObj.severityOverrides !== null
+      ? (userObj.severityOverrides as Record<string, PromptShieldConfig['severityOverrides'][string]>)
+      : DEFAULT_CONFIG.severityOverrides;
+  const mcpObj =
+    typeof userObj.mcp === 'object' && userObj.mcp !== null
+      ? (userObj.mcp as Record<string, unknown>)
+      : {};
+  const outputObj =
+    typeof userObj.output === 'object' && userObj.output !== null
+      ? (userObj.output as Record<string, unknown>)
+      : {};
+
   return {
-    ignore: Array.isArray(user.ignore) ? user.ignore : DEFAULT_CONFIG.ignore,
-    severityOverrides: typeof user.severityOverrides === 'object' && user.severityOverrides
-      ? user.severityOverrides
-      : DEFAULT_CONFIG.severityOverrides,
+    ignore: Array.isArray(userObj.ignore) ? userObj.ignore as PromptShieldConfig['ignore'] : DEFAULT_CONFIG.ignore,
+    severityOverrides,
     mcp: {
-      trusted_servers: Array.isArray(user?.mcp?.trusted_servers)
-        ? user.mcp.trusted_servers
+      trusted_servers: Array.isArray(mcpObj.trusted_servers)
+        ? mcpObj.trusted_servers as string[]
         : DEFAULT_CONFIG.mcp.trusted_servers,
     },
     output: {
-      sarifPath: user?.output?.sarifPath,
-      htmlPath: user?.output?.htmlPath,
+      sarifPath: typeof outputObj.sarifPath === 'string' ? outputObj.sarifPath : undefined,
+      htmlPath: typeof outputObj.htmlPath === 'string' ? outputObj.htmlPath : undefined,
     },
   };
 }
