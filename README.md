@@ -58,8 +58,6 @@ call explain_finding for the first critical result and show remediation
 call apply_fix in dry-run mode and summarize proposed changes
 ```
 
-For submission-focused Bob usage and report export guidance, see [docs/00_HACKATHON_BOB_PROOF_GUIDE.md](docs/00_HACKATHON_BOB_PROOF_GUIDE.md).
-
 ## What PromptShield Detects
 
 - **PS-001**: chained-command allowlist bypass risks
@@ -115,7 +113,6 @@ npm run lint
 
 IBM Bob provides the agent workflow and tool orchestration in-repo. PromptShield provides deterministic security analysis and remediation guidance for AI-assistant configuration risk. Together they make AI-assisted development safer and faster to review.
 
-## Additional Docs
+## IBM Bob Reports
 
-- Hackathon Bob proof guide (requirements + exact Bob sessions + export flow): [docs/00_HACKATHON_BOB_PROOF_GUIDE.md](docs/00_HACKATHON_BOB_PROOF_GUIDE.md)
 - Exported IBM Bob session reports location: [bob-reports/](bob-reports)
