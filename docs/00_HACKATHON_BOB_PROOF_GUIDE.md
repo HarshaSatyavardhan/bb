@@ -70,7 +70,7 @@ Return:
 Prompt:
 
 ```text
-Use docs/BUILD_DOCS_HUB.md as entry point. Follow docs 00 through 05 in order.
+Validate whether README.md and docs/00_HACKATHON_BOB_PROOF_GUIDE.md are enough for another engineer to run this project and prepare hackathon submission artifacts.
 
 Tell me whether another engineer or agent can reproduce this project fully. Identify missing steps, stale commands, or unclear instructions. If you find real doc issues, propose exact patches.
 ```
@@ -120,12 +120,6 @@ Do not fabricate report files. Only commit real exports from IBM Bob.
    - `apply_fix` dry-run
 5. Mention exported Bob reports are committed in `bob-reports/`.
 
-## Continue in strict order
+## Minimal docs policy for submission
 
-After this file, continue with:
-
-1. [01_AGENT_REPRO_START_HERE.md](./01_AGENT_REPRO_START_HERE.md)
-2. [02_AGENT_REPRO_BUILD_AND_VALIDATE.md](./02_AGENT_REPRO_BUILD_AND_VALIDATE.md)
-3. [03_AGENT_REPRO_ENGINEERING_RUNBOOK.md](./03_AGENT_REPRO_ENGINEERING_RUNBOOK.md)
-4. [04_AGENT_REPRO_PROMPT_BOOK.md](./04_AGENT_REPRO_PROMPT_BOOK.md)
-5. [05_AGENT_REPRO_BOB_GUIDE.md](./05_AGENT_REPRO_BOB_GUIDE.md)
+For a lean submission repository, keep only this Bob proof guide under `docs/` and store real exported IBM Bob reports under `bob-reports/`.
