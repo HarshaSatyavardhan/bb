@@ -6,11 +6,18 @@ This is the canonical entry point for all documentation required to build, verif
 
 Feed docs to agents in this exact order:
 
-1. [01_AGENT_REPRO_START_HERE.md](./01_AGENT_REPRO_START_HERE.md)
-2. [02_AGENT_REPRO_BUILD_AND_VALIDATE.md](./02_AGENT_REPRO_BUILD_AND_VALIDATE.md)
-3. [03_AGENT_REPRO_ENGINEERING_RUNBOOK.md](./03_AGENT_REPRO_ENGINEERING_RUNBOOK.md)
-4. [04_AGENT_REPRO_PROMPT_BOOK.md](./04_AGENT_REPRO_PROMPT_BOOK.md)
-5. [05_AGENT_REPRO_BOB_GUIDE.md](./05_AGENT_REPRO_BOB_GUIDE.md)
+1. [00_HACKATHON_BOB_PROOF_GUIDE.md](./00_HACKATHON_BOB_PROOF_GUIDE.md)
+2. [01_AGENT_REPRO_START_HERE.md](./01_AGENT_REPRO_START_HERE.md)
+3. [02_AGENT_REPRO_BUILD_AND_VALIDATE.md](./02_AGENT_REPRO_BUILD_AND_VALIDATE.md)
+4. [03_AGENT_REPRO_ENGINEERING_RUNBOOK.md](./03_AGENT_REPRO_ENGINEERING_RUNBOOK.md)
+5. [04_AGENT_REPRO_PROMPT_BOOK.md](./04_AGENT_REPRO_PROMPT_BOOK.md)
+6. [05_AGENT_REPRO_BOB_GUIDE.md](./05_AGENT_REPRO_BOB_GUIDE.md)
+
+## Bob report export location
+
+Store real exported IBM Bob session reports in:
+
+- [`bob-reports/`](../bob-reports)
 
 ## Detailed source docs (reference library)
 

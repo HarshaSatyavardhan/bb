@@ -125,12 +125,15 @@ IBM Bob provides the agent workflow and tool orchestration in-repo. PromptShield
 ## Additional Docs
 
 - Start here (single build/repro docs entry point): [docs/BUILD_DOCS_HUB.md](docs/BUILD_DOCS_HUB.md)
+- Hackathon Bob proof guide (requirements + exact Bob sessions + export flow): [docs/00_HACKATHON_BOB_PROOF_GUIDE.md](docs/00_HACKATHON_BOB_PROOF_GUIDE.md)
 - Numbered one-by-one agent reproduction sequence:
+  - [docs/00_HACKATHON_BOB_PROOF_GUIDE.md](docs/00_HACKATHON_BOB_PROOF_GUIDE.md)
   - [docs/01_AGENT_REPRO_START_HERE.md](docs/01_AGENT_REPRO_START_HERE.md)
   - [docs/02_AGENT_REPRO_BUILD_AND_VALIDATE.md](docs/02_AGENT_REPRO_BUILD_AND_VALIDATE.md)
   - [docs/03_AGENT_REPRO_ENGINEERING_RUNBOOK.md](docs/03_AGENT_REPRO_ENGINEERING_RUNBOOK.md)
   - [docs/04_AGENT_REPRO_PROMPT_BOOK.md](docs/04_AGENT_REPRO_PROMPT_BOOK.md)
   - [docs/05_AGENT_REPRO_BOB_GUIDE.md](docs/05_AGENT_REPRO_BOB_GUIDE.md)
+- Exported IBM Bob session reports location: [bob-reports/](bob-reports)
 - Bob setup and guided demo: [docs/RUNNING_WITH_BOB.md](docs/RUNNING_WITH_BOB.md)
 - Engineering architecture and maintenance runbook: [docs/ENGINEERING_RUNBOOK.md](docs/ENGINEERING_RUNBOOK.md)
 - Deterministic replication and verification checklist: [docs/REPLICATION_PLAYBOOK.md](docs/REPLICATION_PLAYBOOK.md)
