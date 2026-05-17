@@ -94,15 +94,6 @@ PromptShield exposes four MCP tools when started with `--mcp`:
 - `explain_finding`
 - `apply_fix`
 
-## Bob Skills And Custom Modes
-
-This repository ships Bob-ready assets:
-
-- Skills in [skills](skills)
-- Custom modes and rules in [modes](modes)
-
-These are designed so Bob can use PromptShield MCP tools first, with CLI fallback only when MCP is unavailable.
-
 ## Reports
 
 - JSON for automation and pipelines
