@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "promptshield": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/home/tcs/Desktop/promptshield/dist/cli.js", "--mcp"],
+      "disabled": false,
+      "alwaysAllow": [
+        "scan_project",
+        "list_detectors",
+        "explain_finding"
+      ]
+    }
+  }
+}
