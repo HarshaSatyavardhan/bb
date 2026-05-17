@@ -6,6 +6,7 @@ import { renderTty } from './render/tty.js';
 import { renderJson } from './render/json.js';
 import { renderSarif } from './render/sarif.js';
 import { renderHtml } from './render/html.js';
+import { renderMarkdown } from './render/markdown.js';
 import { planFixes, applyFixes } from '../core/fixer.js';
 import { ALL_DETECTORS } from '../detectors/index.js';
 
@@ -16,6 +17,7 @@ interface ScanCliOptions {
   json?: boolean;
   sarif?: string | boolean;
   html?: string | boolean;
+  markdown?: string | boolean;
   filter?: string[];
   includeHome?: boolean;
   exitZero?: boolean;
@@ -46,7 +48,7 @@ async function runScanCmd(opts: ScanCliOptions): Promise<void> {
   });
 
   // JSON-only mode
-  if (opts.json && !opts.sarif && !opts.html) {
+  if (opts.json && !opts.sarif && !opts.html && !opts.markdown) {
     process.stdout.write(`${renderJson(result)}\n`);
   } else {
     if (!opts.quiet) process.stdout.write(renderTty(result, root));
@@ -67,6 +69,14 @@ async function runScanCmd(opts: ScanCliOptions): Promise<void> {
     content: renderHtml(result, root),
     quiet: opts.quiet,
     label: 'HTML report',
+  });
+  await writeOptionalReport({
+    flag: opts.markdown,
+    defaultPath: 'promptshield-report.md',
+    root,
+    content: renderMarkdown(result, root),
+    quiet: opts.quiet,
+    label: 'Markdown report',
   });
 
   process.exit(opts.exitZero ? 0 : result.exitCode);
@@ -148,6 +158,7 @@ program
   .option('--json', 'output JSON')
   .option('--sarif [path]', 'write SARIF output')
   .option('--html [path]', 'write HTML report')
+  .option('--markdown [path]', 'write Markdown report')
   .option('--filter <ids...>', 'only run these detector IDs (e.g. PS-001)')
   .option('--include-home', 'also scan ~/.bob, ~/.claude, ~/.cursor')
   .option('--exit-zero', 'always exit 0, even on findings')
